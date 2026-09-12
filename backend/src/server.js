@@ -5,6 +5,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 
 const healthRoutes = require('./routes/health.routes');
+const authRoutes = require('./routes/auth.routes');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -14,6 +15,7 @@ app.use(cors());
 app.use(express.json());
 
 app.use('/', healthRoutes);
+app.use('/auth', authRoutes);
 
 // Placeholder root
 app.get('/', (req, res) => {
