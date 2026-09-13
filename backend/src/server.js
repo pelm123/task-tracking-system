@@ -10,6 +10,8 @@ const taskRoutes = require('./routes/task.routes');
 const commentRoutes = require('./routes/comment.routes');
 const commentByIdRoutes = require('./routes/commentById.routes');
 const { taskAttachmentRouter, attachmentByIdRouter } = require('./routes/attachment.routes');
+const notificationRoutes = require('./routes/notification.routes');
+const { startDueDateScheduler } = require('./jobs/dueDateCheck');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -25,6 +27,7 @@ app.use('/tasks/:taskId/comments', commentRoutes);
 app.use('/comments', commentByIdRoutes);
 app.use('/tasks/:taskId/attachments', taskAttachmentRouter);
 app.use('/attachments', attachmentByIdRouter);
+app.use('/notifications', notificationRoutes);
 
 // Placeholder root
 app.get('/', (req, res) => {
@@ -33,4 +36,5 @@ app.get('/', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
+  startDueDateScheduler();
 });
