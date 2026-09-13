@@ -1,0 +1,97 @@
+:root {
+  /* Color — deep graphite base, warm off-white text, muted ochre accent
+     (deliberately not terracotta/#D97757 or the near-black+neon combo —
+     those read as generic AI-generated defaults) */
+  --color-bg: #1c1f1e;
+  --color-surface: #242827;
+  --color-surface-raised: #2d3231;
+  --color-border: #3a403e;
+  --color-text: #ece9e2;
+  --color-text-muted: #9aa39e;
+  --color-accent: #c98a3e;
+  --color-accent-soft: rgba(201, 138, 62, 0.16);
+
+  /* Status colors — distinct hues per Kanban column, all desaturated
+     to sit quietly against the dark surface */
+  --status-todo: #8b9490;
+  --status-in-progress: #c98a3e;
+  --status-review: #6e8fa8;
+  --status-done: #6b9080;
+
+  --priority-low: #7c8985;
+  --priority-medium: #c9a63e;
+  --priority-high: #c9603e;
+
+  /* Type */
+  --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: 'Newsreader', Georgia, serif;
+
+  /* Layout */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --sidebar-width: 224px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  margin: 0 0 0.5em;
+  color: var(--color-text);
+}
+
+a {
+  color: inherit;
+}
+
+button {
+  font-family: var(--font-ui);
+}
+
+input,
+textarea,
+select {
+  font-family: var(--font-ui);
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 14px;
+}
+
+input:focus,
+textarea:focus,
+select:focus,
+button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
