@@ -22,11 +22,15 @@ async function listTasks(req, res) {
 
   try {
     const result = await pool.query(
-      `SELECT id, title, description, status, priority, due_date,
-              assignee_id, created_by, created_at, updated_at
-       FROM tasks
+      `SELECT t.id, t.title, t.description, t.status, t.priority, t.due_date,
+              t.assignee_id, a.name AS assignee_name,
+              t.created_by, c.name AS creator_name,
+              t.created_at, t.updated_at
+       FROM tasks t
+       LEFT JOIN users a ON a.id = t.assignee_id
+       LEFT JOIN users c ON c.id = t.created_by
        ${whereClause}
-       ORDER BY created_at DESC`,
+       ORDER BY t.created_at DESC`,
       values
     );
     res.json(result.rows);
@@ -64,7 +68,7 @@ async function createTask(req, res) {
   try {
     const result = await pool.query(
       `INSERT INTO tasks (title, description, priority, due_date, assignee_id, created_by)
-       VALUES ($1, $2, COALESCE($3, 'medium'), $4, $5, $6)
+       VALUES ($1, $2, COALESCE($3::task_priority, 'medium'), $4, $5, $6)
        RETURNING *`,
       [title, description || null, priority, due_date || null, assignee_id || null, req.user.id]
     );
@@ -88,7 +92,7 @@ async function updateTask(req, res) {
       `UPDATE tasks SET
          title = COALESCE($1, title),
          description = COALESCE($2, description),
-         priority = COALESCE($3, priority),
+         priority = COALESCE($3::task_priority, priority),
          due_date = COALESCE($4, due_date),
          assignee_id = COALESCE($5, assignee_id)
        WHERE id = $6
@@ -116,7 +120,7 @@ async function updateTaskStatus(req, res) {
 
   try {
     const result = await pool.query(
-      `UPDATE tasks SET status = $1 WHERE id = $2 RETURNING *`,
+      `UPDATE tasks SET status = $1::task_status WHERE id = $2 RETURNING *`,
       [status, req.params.id]
     );
 
