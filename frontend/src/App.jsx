@@ -4,6 +4,18 @@ import ProtectedRoute from './components/ProtectedRoute';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import BoardPage from './pages/BoardPage';
+import DashboardPage from './pages/DashboardPage';
+import AppHeader from './components/AppHeader';
+import styles from './components/appHeader.module.css';
+
+function AuthedLayout({ children }) {
+  return (
+    <ProtectedRoute>
+      <AppHeader />
+      <div className={styles.appBody}>{children}</div>
+    </ProtectedRoute>
+  );
+}
 
 export default function App() {
   return (
@@ -15,9 +27,17 @@ export default function App() {
           <Route
             path="/board"
             element={
-              <ProtectedRoute>
+              <AuthedLayout>
                 <BoardPage />
-              </ProtectedRoute>
+              </AuthedLayout>
+            }
+          />
+          <Route
+            path="/dashboard"
+            element={
+              <AuthedLayout>
+                <DashboardPage />
+              </AuthedLayout>
             }
           />
           <Route path="*" element={<Navigate to="/board" replace />} />
