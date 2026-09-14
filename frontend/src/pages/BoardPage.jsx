@@ -2,7 +2,10 @@ import { useEffect, useState, useCallback } from 'react';
 import { DragDropContext } from '@hello-pangea/dnd';
 import { useAuth } from '../context/AuthContext';
 import * as tasksApi from '../api/tasks';
+import * as usersApi from '../api/users';
 import KanbanColumn from '../components/KanbanColumn';
+import NewTaskModal from '../components/NewTaskModal';
+import TaskDetailModal from '../components/TaskDetailModal';
 import styles from './board.module.css';
 
 const COLUMNS = [
@@ -15,8 +18,12 @@ const COLUMNS = [
 export default function BoardPage() {
   const { user, logout } = useAuth();
   const [tasks, setTasks] = useState([]);
+  const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  const [showNewTaskModal, setShowNewTaskModal] = useState(false);
+  const [selectedTask, setSelectedTask] = useState(null);
 
   const loadTasks = useCallback(async () => {
     try {
@@ -31,6 +38,7 @@ export default function BoardPage() {
 
   useEffect(() => {
     loadTasks();
+    usersApi.listUsers().then(setUsers).catch(() => {});
   }, [loadTasks]);
 
   async function handleDragEnd(result) {
@@ -40,7 +48,6 @@ export default function BoardPage() {
 
     const newStatus = destination.droppableId;
 
-    // optimistic update so the UI feels instant
     setTasks((prev) =>
       prev.map((t) => (t.id === draggableId ? { ...t, status: newStatus } : t))
     );
@@ -49,15 +56,13 @@ export default function BoardPage() {
       await tasksApi.updateTaskStatus(draggableId, newStatus);
     } catch (err) {
       setError('Could not save that move — reverting.');
-      loadTasks(); // re-sync with server truth on failure
+      loadTasks();
     }
   }
 
   async function handleQuickAdd(status, title) {
     try {
       const created = await tasksApi.createTask({ title, priority: 'medium' });
-      // quick-add always creates as "todo" server-side; if added from another
-      // column, immediately move it there
       if (status !== 'todo') {
         await tasksApi.updateTaskStatus(created.id, status);
         created.status = status;
@@ -68,9 +73,20 @@ export default function BoardPage() {
     }
   }
 
-  function handleTaskClick(task) {
-    // task detail modal (comments, attachments, edit) comes in the next step
-    console.log('Task clicked:', task.title);
+  async function handleCreateFromModal(payload) {
+    const created = await tasksApi.createTask(payload);
+    setTasks((prev) => [created, ...prev]);
+  }
+
+  async function handleUpdateTask(id, payload) {
+    const updated = await tasksApi.updateTask(id, payload);
+    setTasks((prev) => prev.map((t) => (t.id === id ? updated : t)));
+    setSelectedTask(updated);
+  }
+
+  async function handleDeleteTask(id) {
+    await tasksApi.deleteTask(id);
+    setTasks((prev) => prev.filter((t) => t.id !== id));
   }
 
   if (loading) {
@@ -86,9 +102,18 @@ export default function BoardPage() {
             Signed in as {user?.name} ({user?.role})
           </p>
         </div>
-        <button className={styles.logoutBtn} onClick={logout}>
-          Log out
-        </button>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button
+            className={styles.logoutBtn}
+            style={{ borderColor: 'var(--color-accent)', color: 'var(--color-accent)' }}
+            onClick={() => setShowNewTaskModal(true)}
+          >
+            + New task
+          </button>
+          <button className={styles.logoutBtn} onClick={logout}>
+            Log out
+          </button>
+        </div>
       </div>
 
       {error && <p style={{ color: 'var(--priority-high)', marginBottom: 16 }}>{error}</p>}
@@ -101,12 +126,30 @@ export default function BoardPage() {
               status={col.status}
               label={col.label}
               tasks={tasks.filter((t) => t.status === col.status)}
-              onTaskClick={handleTaskClick}
+              onTaskClick={setSelectedTask}
               onQuickAdd={handleQuickAdd}
             />
           ))}
         </div>
       </DragDropContext>
+
+      {showNewTaskModal && (
+        <NewTaskModal
+          users={users}
+          onClose={() => setShowNewTaskModal(false)}
+          onCreate={handleCreateFromModal}
+        />
+      )}
+
+      {selectedTask && (
+        <TaskDetailModal
+          task={selectedTask}
+          users={users}
+          onClose={() => setSelectedTask(null)}
+          onUpdate={handleUpdateTask}
+          onDelete={handleDeleteTask}
+        />
+      )}
     </div>
   );
 }
