@@ -1,6 +1,7 @@
 .boardScreen {
   padding: 28px 32px;
   height: 100%;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
 }

@@ -1,6 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
 import { DragDropContext } from '@hello-pangea/dnd';
-import { useAuth } from '../context/AuthContext';
 import * as tasksApi from '../api/tasks';
 import * as usersApi from '../api/users';
 import KanbanColumn from '../components/KanbanColumn';
@@ -16,7 +15,6 @@ const COLUMNS = [
 ];
 
 export default function BoardPage() {
-  const { user, logout } = useAuth();
   const [tasks, setTasks] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -98,22 +96,15 @@ export default function BoardPage() {
       <div className={styles.boardHeader}>
         <div>
           <h1>Board</h1>
-          <p className={styles.subLine}>
-            Signed in as {user?.name} ({user?.role})
-          </p>
+          <p className={styles.subLine}>Drag cards between columns, or click one to see details.</p>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button
-            className={styles.logoutBtn}
-            style={{ borderColor: 'var(--color-accent)', color: 'var(--color-accent)' }}
-            onClick={() => setShowNewTaskModal(true)}
-          >
-            + New task
-          </button>
-          <button className={styles.logoutBtn} onClick={logout}>
-            Log out
-          </button>
-        </div>
+        <button
+          className={styles.logoutBtn}
+          style={{ borderColor: 'var(--color-accent)', color: 'var(--color-accent)' }}
+          onClick={() => setShowNewTaskModal(true)}
+        >
+          + New task
+        </button>
       </div>
 
       {error && <p style={{ color: 'var(--priority-high)', marginBottom: 16 }}>{error}</p>}
