@@ -26,6 +26,16 @@ export default function AppHeader() {
           >
             Dashboard
           </NavLink>
+          {user?.role === 'manager' && (
+            <NavLink
+              to="/admin"
+              className={({ isActive }) =>
+                `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`
+              }
+            >
+              Admin
+            </NavLink>
+          )}
         </nav>
       </div>
       <div className={styles.right}>
