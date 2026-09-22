@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
-import ManagerRoute from './components/ManagerRoute';
+import AdminRoute from './components/AdminRoute';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import BoardPage from './pages/BoardPage';
@@ -18,7 +18,7 @@ function AuthedLayout({ children, managerOnly }) {
     </>
   );
   return managerOnly ? (
-    <ManagerRoute>{content}</ManagerRoute>
+    <AdminRoute>{content}</AdminRoute>
   ) : (
     <ProtectedRoute>{content}</ProtectedRoute>
   );

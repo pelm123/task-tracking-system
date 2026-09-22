@@ -26,7 +26,7 @@ export default function AppHeader() {
           >
             Dashboard
           </NavLink>
-          {user?.role === 'manager' && (
+          {['admin', 'pm'].includes(user?.role) && (
             <NavLink
               to="/admin"
               className={({ isActive }) =>
