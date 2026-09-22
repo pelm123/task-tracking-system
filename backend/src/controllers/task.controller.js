@@ -3,19 +3,27 @@ const pool = require('../config/db');
 const VALID_STATUSES = ['todo', 'in_progress', 'review', 'done'];
 const VALID_PRIORITIES = ['low', 'medium', 'high'];
 
-// GET /tasks?status=todo&assignee_id=...
+// GET /tasks?project_id=...&status=todo&assignee_id=...&search=...
 async function listTasks(req, res) {
-  const { status, assignee_id } = req.query;
+  const { status, assignee_id, search, project_id } = req.query;
   const conditions = [];
   const values = [];
 
+  if (project_id) {
+    values.push(project_id);
+    conditions.push(`t.project_id = $${values.length}`);
+  }
   if (status) {
     values.push(status);
-    conditions.push(`status = $${values.length}`);
+    conditions.push(`t.status = $${values.length}`);
   }
   if (assignee_id) {
     values.push(assignee_id);
-    conditions.push(`assignee_id = $${values.length}`);
+    conditions.push(`t.assignee_id = $${values.length}`);
+  }
+  if (search) {
+    values.push(`%${search}%`);
+    conditions.push(`(t.title ILIKE $${values.length} OR t.description ILIKE $${values.length})`);
   }
 
   const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -23,12 +31,14 @@ async function listTasks(req, res) {
   try {
     const result = await pool.query(
       `SELECT t.id, t.title, t.description, t.status, t.priority, t.due_date,
+              t.project_id, p.name AS project_name,
               t.assignee_id, a.name AS assignee_name,
               t.created_by, c.name AS creator_name,
               t.created_at, t.updated_at
        FROM tasks t
        LEFT JOIN users a ON a.id = t.assignee_id
        LEFT JOIN users c ON c.id = t.created_by
+       LEFT JOIN projects p ON p.id = t.project_id
        ${whereClause}
        ORDER BY t.created_at DESC`,
       values
@@ -56,10 +66,13 @@ async function getTask(req, res) {
 
 // POST /tasks
 async function createTask(req, res) {
-  const { title, description, priority, due_date, assignee_id } = req.body;
+  const { title, description, priority, due_date, assignee_id, project_id } = req.body;
 
   if (!title) {
     return res.status(400).json({ message: 'title is required' });
+  }
+  if (!project_id) {
+    return res.status(400).json({ message: 'project_id is required' });
   }
   if (priority && !VALID_PRIORITIES.includes(priority)) {
     return res.status(400).json({ message: `priority must be one of ${VALID_PRIORITIES.join(', ')}` });
@@ -67,10 +80,10 @@ async function createTask(req, res) {
 
   try {
     const result = await pool.query(
-      `INSERT INTO tasks (title, description, priority, due_date, assignee_id, created_by)
-       VALUES ($1, $2, COALESCE($3::task_priority, 'medium'), $4, $5, $6)
+      `INSERT INTO tasks (project_id, title, description, priority, due_date, assignee_id, created_by)
+       VALUES ($1, $2, $3, COALESCE($4::task_priority, 'medium'), $5, $6, $7)
        RETURNING *`,
-      [title, description || null, priority, due_date || null, assignee_id || null, req.user.id]
+      [project_id, title, description || null, priority, due_date || null, assignee_id || null, req.user.id]
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -167,4 +180,74 @@ async function deleteTask(req, res) {
   }
 }
 
-module.exports = { listTasks, getTask, createTask, updateTask, updateTaskStatus, deleteTask };
+// PATCH /tasks/bulk/status — { taskIds: [...], status: 'done' }
+async function bulkUpdateStatus(req, res) {
+  const { taskIds, status } = req.body;
+
+  if (!Array.isArray(taskIds) || taskIds.length === 0) {
+    return res.status(400).json({ message: 'taskIds must be a non-empty array' });
+  }
+  if (!status || !VALID_STATUSES.includes(status)) {
+    return res.status(400).json({ message: `status must be one of ${VALID_STATUSES.join(', ')}` });
+  }
+
+  try {
+    const result = await pool.query(
+      `UPDATE tasks SET status = $1::task_status WHERE id = ANY($2::uuid[]) RETURNING *`,
+      [status, taskIds]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Bulk update status error:', err.message);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+// PATCH /tasks/bulk/assign — { taskIds: [...], assignee_id: uuid|null }
+async function bulkAssign(req, res) {
+  const { taskIds, assignee_id } = req.body;
+
+  if (!Array.isArray(taskIds) || taskIds.length === 0) {
+    return res.status(400).json({ message: 'taskIds must be a non-empty array' });
+  }
+
+  try {
+    const result = await pool.query(
+      `UPDATE tasks SET assignee_id = $1 WHERE id = ANY($2::uuid[]) RETURNING *`,
+      [assignee_id || null, taskIds]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Bulk assign error:', err.message);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+// DELETE /tasks/bulk — { taskIds: [...] }
+async function bulkDelete(req, res) {
+  const { taskIds } = req.body;
+
+  if (!Array.isArray(taskIds) || taskIds.length === 0) {
+    return res.status(400).json({ message: 'taskIds must be a non-empty array' });
+  }
+
+  try {
+    await pool.query(`DELETE FROM tasks WHERE id = ANY($1::uuid[])`, [taskIds]);
+    res.status(204).send();
+  } catch (err) {
+    console.error('Bulk delete error:', err.message);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+module.exports = {
+  listTasks,
+  getTask,
+  createTask,
+  updateTask,
+  updateTaskStatus,
+  deleteTask,
+  bulkUpdateStatus,
+  bulkAssign,
+  bulkDelete,
+};
