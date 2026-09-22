@@ -13,6 +13,7 @@ const { taskAttachmentRouter, attachmentByIdRouter } = require('./routes/attachm
 const notificationRoutes = require('./routes/notification.routes');
 const userRoutes = require('./routes/user.routes');
 const dashboardRoutes = require('./routes/dashboard.routes');
+const projectRoutes = require('./routes/project.routes');
 const { startDueDateScheduler } = require('./jobs/dueDateCheck');
 
 const app = express();
@@ -32,6 +33,7 @@ app.use('/attachments', attachmentByIdRouter);
 app.use('/notifications', notificationRoutes);
 app.use('/users', userRoutes);
 app.use('/dashboard', dashboardRoutes);
+app.use('/projects', projectRoutes);
 
 // Placeholder root
 app.get('/', (req, res) => {

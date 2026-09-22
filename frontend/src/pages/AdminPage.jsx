@@ -152,6 +152,7 @@ export default function AdminPage() {
             <thead>
               <tr>
                 <th>Title</th>
+                <th>Project</th>
                 <th>Status</th>
                 <th>Priority</th>
                 <th>Assignee</th>
@@ -164,6 +165,7 @@ export default function AdminPage() {
               {tasks.map((t) => (
                 <tr key={t.id}>
                   <td>{t.title}</td>
+                  <td className={styles.muted}>{t.project_name}</td>
                   <td>
                     <span className={styles.badge}>{STATUS_LABELS[t.status]}</span>
                   </td>

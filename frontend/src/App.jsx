@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
+import { ProjectProvider } from './context/ProjectContext';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminRoute from './components/AdminRoute';
 import LoginPage from './pages/LoginPage';
@@ -12,10 +13,10 @@ import styles from './components/appHeader.module.css';
 
 function AuthedLayout({ children, managerOnly }) {
   const content = (
-    <>
+    <ProjectProvider>
       <AppHeader />
       <div className={styles.appBody}>{children}</div>
-    </>
+    </ProjectProvider>
   );
   return managerOnly ? (
     <AdminRoute>{content}</AdminRoute>
