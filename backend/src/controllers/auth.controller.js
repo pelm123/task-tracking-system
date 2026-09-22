@@ -19,7 +19,7 @@ async function register(req, res) {
     }
 
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
-    const userRole = role === 'manager' ? 'manager' : 'member'; // default to member
+    const userRole = role === 'pm' ? 'pm' : 'member'; // "admin" can only be granted via the admin panel
 
     const result = await pool.query(
       `INSERT INTO users (name, email, password_hash, role)
