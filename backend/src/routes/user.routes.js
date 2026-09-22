@@ -6,7 +6,7 @@ const router = express.Router();
 
 router.use(authenticate);
 router.get('/', listUsers);
-router.patch('/:id', requireRole('manager'), updateUserRole);
-router.delete('/:id', requireRole('manager'), deleteUser);
+router.patch('/:id', requireRole('admin'), updateUserRole);
+router.delete('/:id', requireRole('admin'), deleteUser);
 
 module.exports = router;

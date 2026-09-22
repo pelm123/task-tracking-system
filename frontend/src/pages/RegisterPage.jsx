@@ -66,7 +66,7 @@ export default function RegisterPage() {
             <label htmlFor="role">Role</label>
             <select id="role" value={role} onChange={(e) => setRole(e.target.value)}>
               <option value="member">Team member</option>
-              <option value="manager">Manager</option>
+              <option value="pm">Project manager</option>
             </select>
           </div>
 

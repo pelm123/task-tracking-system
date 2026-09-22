@@ -13,11 +13,11 @@ async function listUsers(req, res) {
   }
 }
 
-// PATCH /users/:id — manager only, currently just role changes
+// PATCH /users/:id — admin only
 async function updateUserRole(req, res) {
   const { role } = req.body;
-  if (!['manager', 'member'].includes(role)) {
-    return res.status(400).json({ message: 'role must be "manager" or "member"' });
+  if (!['admin', 'pm', 'member'].includes(role)) {
+    return res.status(400).json({ message: 'role must be "admin", "pm", or "member"' });
   }
 
   try {

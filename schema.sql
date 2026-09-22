@@ -5,7 +5,7 @@
 CREATE EXTENSION IF NOT EXISTS "pgcrypto"; -- for gen_random_uuid()
 
 -- ── Enum types ──────────────────────────────────────────────
-CREATE TYPE user_role AS ENUM ('manager', 'member');
+CREATE TYPE user_role AS ENUM ('admin', 'pm', 'member');
 CREATE TYPE task_status AS ENUM ('todo', 'in_progress', 'review', 'done');
 CREATE TYPE task_priority AS ENUM ('low', 'medium', 'high');
 CREATE TYPE notification_type AS ENUM ('due_soon', 'assigned', 'comment', 'status_change');

@@ -13,12 +13,14 @@ function formatDate(dateStr) {
 
 export default function AdminPage() {
   const { user: currentUser } = useAuth();
-  const [tab, setTab] = useState('users');
+  const isAdmin = currentUser.role === 'admin';
+  const [tab, setTab] = useState(isAdmin ? 'users' : 'tasks');
 
   const [users, setUsers] = useState([]);
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [savedUserId, setSavedUserId] = useState(null);
 
   useEffect(() => {
     Promise.all([usersApi.listUsers(), tasksApi.listTasks()])
@@ -34,6 +36,8 @@ export default function AdminPage() {
     try {
       const updated = await usersApi.updateUserRole(userId, role);
       setUsers((prev) => prev.map((u) => (u.id === userId ? updated : u)));
+      setSavedUserId(userId);
+      setTimeout(() => setSavedUserId((current) => (current === userId ? null : current)), 1500);
     } catch (err) {
       setError('Could not update role.');
     }
@@ -77,12 +81,14 @@ export default function AdminPage() {
       {error && <p style={{ color: 'var(--priority-high)', marginBottom: 16 }}>{error}</p>}
 
       <div className={styles.tabs}>
-        <button
-          className={`${styles.tabBtn} ${tab === 'users' ? styles.tabBtnActive : ''}`}
-          onClick={() => setTab('users')}
-        >
-          Users ({users.length})
-        </button>
+        {isAdmin && (
+          <button
+            className={`${styles.tabBtn} ${tab === 'users' ? styles.tabBtnActive : ''}`}
+            onClick={() => setTab('users')}
+          >
+            Users ({users.length})
+          </button>
+        )}
         <button
           className={`${styles.tabBtn} ${tab === 'tasks' ? styles.tabBtnActive : ''}`}
           onClick={() => setTab('tasks')}
@@ -91,7 +97,7 @@ export default function AdminPage() {
         </button>
       </div>
 
-      {tab === 'users' && (
+      {tab === 'users' && isAdmin && (
         <div className={styles.tableWrap}>
           <table className={styles.table}>
             <thead>
@@ -116,8 +122,14 @@ export default function AdminPage() {
                       onChange={(e) => handleRoleChange(u.id, e.target.value)}
                     >
                       <option value="member">Member</option>
-                      <option value="manager">Manager</option>
+                      <option value="pm">PM</option>
+                      <option value="admin">Admin</option>
                     </select>
+                    {savedUserId === u.id && (
+                      <span style={{ marginLeft: 8, color: 'var(--status-done)', fontSize: 12 }}>
+                        ✓ Saved
+                      </span>
+                    )}
                   </td>
                   <td className={styles.muted}>{formatDate(u.created_at)}</td>
                   <td>

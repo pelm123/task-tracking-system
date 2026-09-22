@@ -145,13 +145,21 @@ async function updateTaskStatus(req, res) {
   }
 }
 
-// DELETE /tasks/:id
+// DELETE /tasks/:id — admin/pm, or the task's own creator
 async function deleteTask(req, res) {
   try {
-    const result = await pool.query('DELETE FROM tasks WHERE id = $1 RETURNING id', [req.params.id]);
-    if (result.rows.length === 0) {
+    const existing = await pool.query('SELECT created_by FROM tasks WHERE id = $1', [req.params.id]);
+    if (existing.rows.length === 0) {
       return res.status(404).json({ message: 'Task not found' });
     }
+
+    const isPrivileged = ['admin', 'pm'].includes(req.user.role);
+    const isOwner = existing.rows[0].created_by === req.user.id;
+    if (!isPrivileged && !isOwner) {
+      return res.status(403).json({ message: 'Only an admin, PM, or the task creator can delete this task' });
+    }
+
+    await pool.query('DELETE FROM tasks WHERE id = $1', [req.params.id]);
     res.status(204).send();
   } catch (err) {
     console.error('Delete task error:', err.message);
