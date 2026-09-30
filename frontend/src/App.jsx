@@ -8,6 +8,7 @@ import RegisterPage from './pages/RegisterPage';
 import BoardPage from './pages/BoardPage';
 import DashboardPage from './pages/DashboardPage';
 import AdminPage from './pages/AdminPage';
+import ProfilePage from './pages/ProfilePage';
 import AppHeader from './components/AppHeader';
 import styles from './components/appHeader.module.css';
 
@@ -53,6 +54,14 @@ export default function App() {
             element={
               <AuthedLayout managerOnly>
                 <AdminPage />
+              </AuthedLayout>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <AuthedLayout>
+                <ProfilePage />
               </AuthedLayout>
             }
           />

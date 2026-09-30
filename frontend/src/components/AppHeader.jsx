@@ -65,9 +65,9 @@ export default function AppHeader() {
         </nav>
       </div>
       <div className={styles.right}>
-        <span className={styles.userLabel}>
+        <NavLink to="/profile" className={styles.userLabel} style={{ textDecoration: 'none' }}>
           {user?.name} · {user?.role}
-        </span>
+        </NavLink>
         <button className={styles.iconBtn} onClick={logout}>
           Log out
         </button>
