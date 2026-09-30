@@ -13,6 +13,8 @@ import {
   Legend,
 } from 'recharts';
 import * as dashboardApi from '../api/dashboard';
+import * as projectsApi from '../api/projects';
+import { useProject } from '../context/ProjectContext';
 import styles from './dashboard.module.css';
 
 const STATUS_LABELS = { todo: 'To Do', in_progress: 'In Progress', review: 'Review', done: 'Done' };
@@ -24,8 +26,20 @@ const STATUS_COLORS = {
 };
 const PRIORITY_COLORS = { low: '#7c8985', medium: '#c9a63e', high: '#c9603e' };
 
+function timeAgo(dateStr) {
+  const diffMs = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
+
 export default function DashboardPage() {
+  const { currentProjectId } = useProject();
   const [summary, setSummary] = useState(null);
+  const [activity, setActivity] = useState([]);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -34,6 +48,11 @@ export default function DashboardPage() {
       .then(setSummary)
       .catch(() => setError('Could not load dashboard data.'));
   }, []);
+
+  useEffect(() => {
+    if (!currentProjectId) return;
+    projectsApi.getActivity(currentProjectId).then(setActivity).catch(() => {});
+  }, [currentProjectId]);
 
   if (error) {
     return (
@@ -147,6 +166,40 @@ export default function DashboardPage() {
             </BarChart>
           </ResponsiveContainer>
         </div>
+      </div>
+
+      <div className={styles.chartCard} style={{ marginTop: 20 }}>
+        <p className={styles.chartTitle}>Recent activity</p>
+        {activity.length === 0 ? (
+          <p style={{ color: 'var(--color-text-muted)', fontSize: 13, fontStyle: 'italic' }}>
+            Nothing yet.
+          </p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {activity.map((a, i) => (
+              <div
+                key={i}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  fontSize: 13,
+                  paddingBottom: 10,
+                  borderBottom: i < activity.length - 1 ? '1px solid var(--color-border)' : 'none',
+                }}
+              >
+                <span>
+                  <strong>{a.actor_name}</strong>{' '}
+                  {a.type === 'task_created' ? 'created' : 'commented on'}{' '}
+                  <span style={{ color: 'var(--color-accent)' }}>{a.task_title}</span>
+                </span>
+                <span style={{ color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
+                  {timeAgo(a.at)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

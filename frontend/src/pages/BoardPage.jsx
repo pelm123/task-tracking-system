@@ -7,6 +7,14 @@ import KanbanColumn from '../components/KanbanColumn';
 import NewTaskModal from '../components/NewTaskModal';
 import TaskDetailModal from '../components/TaskDetailModal';
 import styles from './board.module.css';
+import tableStyles from './admin.module.css';
+
+const STATUS_LABELS = { todo: 'To Do', in_progress: 'In Progress', review: 'Review', done: 'Done' };
+
+function formatDate(dateStr) {
+  if (!dateStr) return '—';
+  return new Date(dateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+}
 
 const COLUMNS = [
   { status: 'todo', label: 'To Do' },
@@ -26,6 +34,7 @@ export default function BoardPage() {
   const [filterPriority, setFilterPriority] = useState('');
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
+  const [view, setView] = useState('board'); // 'board' | 'list'
 
   const [showNewTaskModal, setShowNewTaskModal] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
@@ -187,6 +196,13 @@ export default function BoardPage() {
         >
           {selectMode ? 'Cancel select' : 'Select'}
         </button>
+        <button
+          className={styles.logoutBtn}
+          style={{ marginLeft: 10 }}
+          onClick={() => setView((v) => (v === 'board' ? 'list' : 'board'))}
+        >
+          {view === 'board' ? 'List view' : 'Board view'}
+        </button>
       </div>
 
       {error && <p style={{ color: 'var(--priority-high)', marginBottom: 16 }}>{error}</p>}
@@ -267,23 +283,59 @@ export default function BoardPage() {
         </div>
       )}
 
-      <DragDropContext onDragEnd={handleDragEnd}>
-        <div className={styles.columns}>
-          {COLUMNS.map((col) => (
-            <KanbanColumn
-              key={col.status}
-              status={col.status}
-              label={col.label}
-              tasks={filteredTasks.filter((t) => t.status === col.status)}
-              onTaskClick={setSelectedTask}
-              onQuickAdd={handleQuickAdd}
-              selectMode={selectMode}
-              selectedIds={selectedIds}
-              onToggleSelect={toggleSelect}
-            />
-          ))}
+      {view === 'list' ? (
+        <div className={tableStyles.tableWrap}>
+          <table className={tableStyles.table}>
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>Status</th>
+                <th>Priority</th>
+                <th>Assignee</th>
+                <th>Due date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredTasks.map((t) => (
+                <tr key={t.id} onClick={() => setSelectedTask(t)} style={{ cursor: 'pointer' }}>
+                  <td>{t.title}</td>
+                  <td>
+                    <span className={tableStyles.badge}>{STATUS_LABELS[t.status]}</span>
+                  </td>
+                  <td className={tableStyles.muted}>{t.priority}</td>
+                  <td className={tableStyles.muted}>{t.assignee_name || 'Unassigned'}</td>
+                  <td className={tableStyles.muted}>{formatDate(t.due_date)}</td>
+                </tr>
+              ))}
+              {filteredTasks.length === 0 && (
+                <tr>
+                  <td colSpan={5} className={tableStyles.muted} style={{ textAlign: 'center', padding: 24 }}>
+                    No tasks match your filters.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
         </div>
-      </DragDropContext>
+      ) : (
+        <DragDropContext onDragEnd={handleDragEnd}>
+          <div className={styles.columns}>
+            {COLUMNS.map((col) => (
+              <KanbanColumn
+                key={col.status}
+                status={col.status}
+                label={col.label}
+                tasks={filteredTasks.filter((t) => t.status === col.status)}
+                onTaskClick={setSelectedTask}
+                onQuickAdd={handleQuickAdd}
+                selectMode={selectMode}
+                selectedIds={selectedIds}
+                onToggleSelect={toggleSelect}
+              />
+            ))}
+          </div>
+        </DragDropContext>
+      )}
 
       {showNewTaskModal && (
         <NewTaskModal
