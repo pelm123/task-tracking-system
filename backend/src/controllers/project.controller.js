@@ -76,4 +76,28 @@ async function deleteProject(req, res) {
   }
 }
 
-module.exports = { listProjects, createProject, updateProject, deleteProject };
+// GET /projects/:id/activity
+async function getActivity(req, res) {
+  try {
+    const result = await pool.query(
+      `(SELECT 'task_created' AS type, t.title AS task_title, u.name AS actor_name, t.created_at AS at
+        FROM tasks t JOIN users u ON u.id = t.created_by
+        WHERE t.project_id = $1)
+       UNION ALL
+       (SELECT 'comment' AS type, t.title AS task_title, u.name AS actor_name, c.created_at AS at
+        FROM comments c
+        JOIN tasks t ON t.id = c.task_id
+        JOIN users u ON u.id = c.user_id
+        WHERE t.project_id = $1)
+       ORDER BY at DESC
+       LIMIT 15`,
+      [req.params.id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Get activity error:', err.message);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+module.exports = { listProjects, createProject, updateProject, deleteProject, getActivity };

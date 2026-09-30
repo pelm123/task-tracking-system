@@ -15,3 +15,7 @@ export function updateProject(id, payload) {
 export function deleteProject(id) {
   return client.delete(`/projects/${id}`);
 }
+
+export function getActivity(projectId) {
+  return client.get(`/projects/${projectId}/activity`).then((res) => res.data);
+}
