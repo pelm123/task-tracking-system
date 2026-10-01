@@ -1,21 +1,28 @@
 const pool = require('../config/db');
 
-// GET /dashboard/summary
+// GET /dashboard/summary?project_id=...
 async function getSummary(req, res) {
+  const { project_id } = req.query;
+  const projectFilter = project_id ? `WHERE t.project_id = $1` : '';
+  const projectFilterAnd = project_id ? `AND t.project_id = $1` : '';
+  const params = project_id ? [project_id] : [];
+
   try {
     const [byStatus, byPriority, overdue, byAssignee] = await Promise.all([
-      pool.query(`SELECT status, COUNT(*)::int AS count FROM tasks GROUP BY status`),
-      pool.query(`SELECT priority, COUNT(*)::int AS count FROM tasks GROUP BY priority`),
+      pool.query(`SELECT t.status, COUNT(*)::int AS count FROM tasks t ${projectFilter} GROUP BY t.status`, params),
+      pool.query(`SELECT t.priority, COUNT(*)::int AS count FROM tasks t ${projectFilter} GROUP BY t.priority`, params),
       pool.query(
-        `SELECT COUNT(*)::int AS count FROM tasks
-         WHERE due_date IS NOT NULL AND due_date < now() AND status != 'done'`
+        `SELECT COUNT(*)::int AS count FROM tasks t
+         WHERE t.due_date IS NOT NULL AND t.due_date < now() AND t.status != 'done' ${projectFilterAnd}`,
+        params
       ),
       pool.query(
         `SELECT u.id, u.name, COUNT(t.id)::int AS count
          FROM users u
-         LEFT JOIN tasks t ON t.assignee_id = u.id AND t.status != 'done'
+         LEFT JOIN tasks t ON t.assignee_id = u.id AND t.status != 'done' ${project_id ? 'AND t.project_id = $1' : ''}
          GROUP BY u.id, u.name
-         ORDER BY count DESC`
+         ORDER BY count DESC`,
+        params
       ),
     ]);
 
