@@ -7,7 +7,7 @@ import styles from './appHeader.module.css';
 
 export default function AppHeader() {
   const { user, logout } = useAuth();
-  const { projects, currentProjectId, selectProject, createProject } = useProject();
+  const { projects, currentProjectId, currentProject, selectProject, createProject, deleteProject } = useProject();
   const [showNewProject, setShowNewProject] = useState(false);
   const canManageProjects = ['admin', 'pm'].includes(user?.role);
 
@@ -30,9 +30,28 @@ export default function AppHeader() {
         </select>
 
         {canManageProjects && (
-          <button className={styles.iconBtn} onClick={() => setShowNewProject(true)}>
-            + Project
-          </button>
+          <>
+            <button className={styles.iconBtn} onClick={() => setShowNewProject(true)}>
+              + Project
+            </button>
+            {currentProject && (
+              <button
+                className={styles.iconBtn}
+                style={{ borderColor: 'var(--priority-high)', color: 'var(--priority-high)' }}
+                onClick={async () => {
+                  if (
+                    window.confirm(
+                      `Delete "${currentProject.name}"? This permanently deletes ALL ${currentProject.task_count} task(s) in it. This cannot be undone.`
+                    )
+                  ) {
+                    await deleteProject(currentProject.id);
+                  }
+                }}
+              >
+                Delete project
+              </button>
+            )}
+          </>
         )}
 
         <nav className={styles.nav}>
