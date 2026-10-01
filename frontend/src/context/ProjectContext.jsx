@@ -37,11 +37,22 @@ export function ProjectProvider({ children }) {
     return created;
   }
 
+  async function deleteProject(id) {
+    await projectsApi.deleteProject(id);
+    setProjects((prev) => {
+      const remaining = prev.filter((p) => p.id !== id);
+      if (currentProjectId === id) {
+        selectProject(remaining[0]?.id || null);
+      }
+      return remaining;
+    });
+  }
+
   const currentProject = projects.find((p) => p.id === currentProjectId) || null;
 
   return (
     <ProjectContext.Provider
-      value={{ projects, currentProjectId, currentProject, loading, selectProject, createProject, refresh }}
+      value={{ projects, currentProjectId, currentProject, loading, selectProject, createProject, deleteProject, refresh }}
     >
       {children}
     </ProjectContext.Provider>

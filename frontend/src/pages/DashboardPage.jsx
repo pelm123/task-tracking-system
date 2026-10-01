@@ -43,11 +43,12 @@ export default function DashboardPage() {
   const [error, setError] = useState('');
 
   useEffect(() => {
+    if (!currentProjectId) return;
     dashboardApi
-      .getSummary()
+      .getSummary(currentProjectId)
       .then(setSummary)
       .catch(() => setError('Could not load dashboard data.'));
-  }, []);
+  }, [currentProjectId]);
 
   useEffect(() => {
     if (!currentProjectId) return;

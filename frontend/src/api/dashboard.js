@@ -1,5 +1,5 @@
 import client from './client';
 
-export function getSummary() {
-  return client.get('/dashboard/summary').then((res) => res.data);
+export function getSummary(projectId) {
+  return client.get('/dashboard/summary', { params: projectId ? { project_id: projectId } : {} }).then((res) => res.data);
 }
