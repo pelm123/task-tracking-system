@@ -14,6 +14,8 @@ const notificationRoutes = require('./routes/notification.routes');
 const userRoutes = require('./routes/user.routes');
 const dashboardRoutes = require('./routes/dashboard.routes');
 const projectRoutes = require('./routes/project.routes');
+const lineRoutes = require('./routes/line.routes');
+const { handleWebhook } = require('./controllers/line.controller');
 const { startDueDateScheduler } = require('./jobs/dueDateCheck');
 
 const app = express();
@@ -21,6 +23,12 @@ const PORT = process.env.PORT || 4000;
 
 app.use(helmet());
 app.use(cors());
+
+// LINE webhook MUST be mounted with express.raw() before express.json() below —
+// LINE's signature verification needs the exact original request bytes, and
+// express.json() would already have consumed/parsed the stream by then.
+app.post('/line/webhook', express.raw({ type: 'application/json' }), handleWebhook);
+
 app.use(express.json());
 
 app.use('/', healthRoutes);
@@ -34,6 +42,7 @@ app.use('/notifications', notificationRoutes);
 app.use('/users', userRoutes);
 app.use('/dashboard', dashboardRoutes);
 app.use('/projects', projectRoutes);
+app.use('/line', lineRoutes);
 
 // Placeholder root
 app.get('/', (req, res) => {
