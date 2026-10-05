@@ -6,9 +6,15 @@ export default function NewTaskModal({ users, onClose, onCreate }) {
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState('medium');
   const [dueDate, setDueDate] = useState('');
-  const [assigneeId, setAssigneeId] = useState('');
+  const [assigneeIds, setAssigneeIds] = useState([]);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+
+  function toggleAssignee(userId) {
+    setAssigneeIds((prev) =>
+      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
+    );
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -24,7 +30,7 @@ export default function NewTaskModal({ users, onClose, onCreate }) {
         description: description.trim() || undefined,
         priority,
         due_date: dueDate || undefined,
-        assignee_id: assigneeId || undefined,
+        assignee_ids: assigneeIds,
       });
       onClose();
     } catch (err) {
@@ -81,15 +87,24 @@ export default function NewTaskModal({ users, onClose, onCreate }) {
           </div>
 
           <div className={styles.field}>
-            <label htmlFor="assignee">Assign to</label>
-            <select id="assignee" value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}>
-              <option value="">Unassigned</option>
+            <label>
+              Assign to{assigneeIds.length > 0 && ` (${assigneeIds.length} selected)`}
+            </label>
+            <div className={styles.assigneeList}>
+              {users.length === 0 && <p className={styles.emptyText}>No users available.</p>}
               {users.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.name} ({u.role})
-                </option>
+                <label key={u.id} className={styles.assigneeRow}>
+                  <input
+                    type="checkbox"
+                    checked={assigneeIds.includes(u.id)}
+                    onChange={() => toggleAssignee(u.id)}
+                  />
+                  <span className={styles.assigneeName}>
+                    {u.name} <span className={styles.assigneeRole}>({u.role})</span>
+                  </span>
+                </label>
               ))}
-            </select>
+            </div>
           </div>
 
           {error && <p className={styles.errorText}>{error}</p>}

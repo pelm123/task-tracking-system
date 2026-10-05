@@ -49,26 +49,38 @@ export default function TaskCard({ task, index, onClick, selectMode, isSelected,
             </span>
             {task.due_date && <span className={styles.dueDate}>Due {formatDueDate(task.due_date)}</span>}
           </div>
-          {task.assignee_name && (
+          {task.assignees && task.assignees.length > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
-              <span
-                style={{
-                  width: 18,
-                  height: 18,
-                  borderRadius: '50%',
-                  background: 'var(--color-accent-soft)',
-                  color: 'var(--color-accent)',
-                  fontSize: 10,
-                  fontWeight: 700,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                }}
-              >
-                {task.assignee_name.charAt(0).toUpperCase()}
+              <div style={{ display: 'flex' }}>
+                {task.assignees.slice(0, 4).map((a, i) => (
+                  <span
+                    key={a.id}
+                    title={a.name}
+                    style={{
+                      width: 18,
+                      height: 18,
+                      borderRadius: '50%',
+                      background: 'var(--color-accent-soft)',
+                      color: 'var(--color-accent)',
+                      fontSize: 10,
+                      fontWeight: 700,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      border: '2px solid var(--color-surface)',
+                      marginLeft: i === 0 ? 0 : -6,
+                    }}
+                  >
+                    {a.name.charAt(0).toUpperCase()}
+                  </span>
+                ))}
+              </div>
+              <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
+                {task.assignees.length === 1
+                  ? task.assignees[0].name
+                  : `${task.assignees.length} assignees`}
               </span>
-              <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{task.assignee_name}</span>
             </div>
           )}
         </div>
