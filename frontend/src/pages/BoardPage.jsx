@@ -182,32 +182,28 @@ export default function BoardPage() {
           <h1>{currentProject?.name || 'Board'}</h1>
           <p className={styles.subLine}>Drag cards between columns, or click one to see details.</p>
         </div>
-        <button
-          className={styles.logoutBtn}
-          style={{ borderColor: 'var(--color-accent)', color: 'var(--color-accent)' }}
-          onClick={() => setShowNewTaskModal(true)}
-        >
-          + New task
-        </button>
-        <button
-          className={styles.logoutBtn}
-          style={{ marginLeft: 10 }}
-          onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
-        >
-          {selectMode ? 'Cancel select' : 'Select'}
-        </button>
-        <button
-          className={styles.logoutBtn}
-          style={{ marginLeft: 10 }}
-          onClick={() => setView((v) => (v === 'board' ? 'list' : 'board'))}
-        >
-          {view === 'board' ? 'List view' : 'Board view'}
-        </button>
+        <div className={styles.headerActions}>
+          <button className="btn btn-primary" onClick={() => setShowNewTaskModal(true)}>
+            + New task
+          </button>
+          <button
+            className={`btn ${selectMode ? 'btn-active' : 'btn-secondary'}`}
+            onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
+          >
+            {selectMode ? 'Cancel select' : 'Select'}
+          </button>
+          <button
+            className="btn btn-secondary"
+            onClick={() => setView((v) => (v === 'board' ? 'list' : 'board'))}
+          >
+            {view === 'board' ? 'List view' : 'Board view'}
+          </button>
+        </div>
       </div>
 
       {error && <p style={{ color: 'var(--priority-high)', marginBottom: 16 }}>{error}</p>}
 
-      <div style={{ display: 'flex', gap: 10, marginBottom: 18, flexWrap: 'wrap' }}>
+      <div className={styles.filterBar}>
         <input
           placeholder="Search tasks…"
           value={searchQuery}
@@ -230,7 +226,7 @@ export default function BoardPage() {
         </select>
         {(searchQuery || filterAssignee || filterPriority) && (
           <button
-            className={styles.logoutBtn}
+            className="btn btn-ghost"
             onClick={() => {
               setSearchQuery('');
               setFilterAssignee('');
@@ -277,7 +273,7 @@ export default function BoardPage() {
               </option>
             ))}
           </select>
-          <button className={styles.logoutBtn} style={{ borderColor: 'var(--priority-high)', color: 'var(--priority-high)' }} onClick={handleBulkDelete}>
+          <button className="btn btn-danger" onClick={handleBulkDelete}>
             Delete selected
           </button>
         </div>

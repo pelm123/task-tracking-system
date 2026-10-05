@@ -2,25 +2,106 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 18px 32px;
+  padding: 14px 32px;
   border-bottom: 1px solid var(--color-border);
+  gap: 20px;
 }
 
 .left {
   display: flex;
   align-items: center;
-  gap: 28px;
+  gap: 14px;
+  min-width: 0;
 }
 
 .brand {
   font-family: var(--font-display);
   font-size: 18px;
   font-weight: 600;
+  flex-shrink: 0;
+}
+
+.projectPicker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 4px 4px 4px 10px;
+}
+
+.projectPicker select {
+  border: none;
+  background: transparent;
+  padding: 4px 2px;
+  font-size: 13px;
+  font-weight: 500;
+  max-width: 200px;
+  text-overflow: ellipsis;
+}
+
+.projectPicker select:focus {
+  outline: none;
+}
+
+.menuWrap {
+  position: relative;
+}
+
+.menuTrigger {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  line-height: 1;
+}
+
+.menuTrigger:hover {
+  color: var(--color-text);
+  background: var(--color-surface);
+}
+
+.menuDropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  min-width: 180px;
+  overflow: hidden;
+  z-index: 20;
+}
+
+.menuItem {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.menuItem:hover {
+  background: var(--color-surface);
+}
+
+.menuItemDanger {
+  color: var(--priority-high);
 }
 
 .nav {
   display: flex;
   gap: 4px;
+  margin-left: 8px;
 }
 
 .navLink {

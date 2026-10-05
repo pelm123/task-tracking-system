@@ -22,6 +22,7 @@ export default function TaskCard({ task, index, onClick, selectMode, isSelected,
           {...provided.draggableProps}
           {...provided.dragHandleProps}
           className={`${styles.card} ${snapshot.isDragging ? styles.dragging : ''}`}
+          style={{ '--card-accent': PRIORITY_COLORS[task.priority], ...provided.draggableProps.style }}
           onClick={() => (selectMode ? onToggleSelect(task.id) : onClick(task))}
         >
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
@@ -49,8 +50,25 @@ export default function TaskCard({ task, index, onClick, selectMode, isSelected,
             {task.due_date && <span className={styles.dueDate}>Due {formatDueDate(task.due_date)}</span>}
           </div>
           {task.assignee_name && (
-            <div style={{ marginTop: 6, fontSize: 12, color: 'var(--color-text-muted)' }}>
-              👤 {task.assignee_name}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
+              <span
+                style={{
+                  width: 18,
+                  height: 18,
+                  borderRadius: '50%',
+                  background: 'var(--color-accent-soft)',
+                  color: 'var(--color-accent)',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  flexShrink: 0,
+                }}
+              >
+                {task.assignee_name.charAt(0).toUpperCase()}
+              </span>
+              <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>{task.assignee_name}</span>
             </div>
           )}
         </div>
