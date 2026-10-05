@@ -111,7 +111,7 @@ export default function BoardPage() {
 
   const filteredTasks = tasks.filter((t) => {
     if (searchQuery && !t.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-    if (filterAssignee && t.assignee_id !== filterAssignee) return false;
+    if (filterAssignee && !(t.assignees || []).some((a) => a.id === filterAssignee)) return false;
     if (filterPriority && t.priority !== filterPriority) return false;
     return true;
   });
@@ -139,10 +139,9 @@ export default function BoardPage() {
 
   async function handleBulkAssign(assigneeId) {
     try {
-      await tasksApi.bulkAssign(selectedIds, assigneeId || null);
-      setTasks((prev) =>
-        prev.map((t) => (selectedIds.includes(t.id) ? { ...t, assignee_id: assigneeId || null } : t))
-      );
+      const updated = await tasksApi.bulkAssign(selectedIds, assigneeId || null);
+      const byId = new Map(updated.map((t) => [t.id, t]));
+      setTasks((prev) => prev.map((t) => byId.get(t.id) || t));
       exitSelectMode();
     } catch (err) {
       setError('Bulk assign failed.');
@@ -262,11 +261,14 @@ export default function BoardPage() {
             <option value="review">Review</option>
             <option value="done">Done</option>
           </select>
-          <select onChange={(e) => handleBulkAssign(e.target.value)} defaultValue="">
+          <select
+            onChange={(e) => handleBulkAssign(e.target.value === '__clear__' ? null : e.target.value)}
+            defaultValue=""
+          >
             <option value="" disabled>
-              Assign to…
+              Add assignee…
             </option>
-            <option value="">Unassigned</option>
+            <option value="__clear__">Clear all assignees</option>
             {users.map((u) => (
               <option key={u.id} value={u.id}>
                 {u.name}
@@ -299,7 +301,11 @@ export default function BoardPage() {
                     <span className={tableStyles.badge}>{STATUS_LABELS[t.status]}</span>
                   </td>
                   <td className={tableStyles.muted}>{t.priority}</td>
-                  <td className={tableStyles.muted}>{t.assignee_name || 'Unassigned'}</td>
+                  <td className={tableStyles.muted}>
+                    {t.assignees && t.assignees.length > 0
+                      ? t.assignees.map((a) => a.name).join(', ')
+                      : 'Unassigned'}
+                  </td>
                   <td className={tableStyles.muted}>{formatDate(t.due_date)}</td>
                 </tr>
               ))}
