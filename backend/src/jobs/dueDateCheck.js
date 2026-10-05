@@ -1,12 +1,11 @@
 const cron = require('node-cron');
 const pool = require('../config/db');
+const { notifyLineIfLinked } = require('../config/line');
 
 const DUE_SOON_WINDOW_HOURS = 24;
 
 async function checkDueSoonTasks() {
   try {
-    // Tasks due within the next 24h, not done, that don't already have
-    // a due_soon notification created in the last 24h (avoid spamming).
     const result = await pool.query(
       `SELECT t.id, t.title, t.due_date, t.assignee_id
        FROM tasks t
@@ -23,11 +22,13 @@ async function checkDueSoonTasks() {
     );
 
     for (const task of result.rows) {
+      const message = `Task "${task.title}" is due soon`;
       await pool.query(
         `INSERT INTO notifications (user_id, task_id, type, message)
          VALUES ($1, $2, 'due_soon', $3)`,
-        [task.assignee_id, task.id, `Task "${task.title}" is due soon`]
+        [task.assignee_id, task.id, message]
       );
+      notifyLineIfLinked(task.assignee_id, `⏰ ${message}`);
     }
 
     if (result.rows.length > 0) {
@@ -39,7 +40,6 @@ async function checkDueSoonTasks() {
 }
 
 function startDueDateScheduler() {
-  // runs every hour, on the hour
   cron.schedule('0 * * * *', checkDueSoonTasks);
   console.log('[due-date-check] scheduler started (runs hourly)');
 }

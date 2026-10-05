@@ -1,19 +1,42 @@
 const pool = require('../config/db');
+const { notifyLineIfLinked } = require('../config/line');
 
 const VALID_STATUSES = ['todo', 'in_progress', 'review', 'done'];
 const VALID_PRIORITIES = ['low', 'medium', 'high'];
 
 async function notifyAssignment(assigneeId, actorId, taskId, taskTitle) {
   if (!assigneeId || assigneeId === actorId) return; // don't notify yourself
+  const message = `You were assigned to "${taskTitle}"`;
   try {
     await pool.query(
       `INSERT INTO notifications (user_id, task_id, type, message)
        VALUES ($1, $2, 'assigned', $3)`,
-      [assigneeId, taskId, `You were assigned to "${taskTitle}"`]
+      [assigneeId, taskId, message]
     );
   } catch (err) {
     console.error('notifyAssignment error:', err.message);
   }
+  notifyLineIfLinked(assigneeId, `📋 ${message}`);
+}
+
+// Re-fetches a task WITH its joined display fields (assignee_name, creator_name,
+// project_name) — a plain "UPDATE ... RETURNING *" only has raw columns, which
+// left the frontend with tasks missing their assignee name until a full reload.
+async function getEnrichedTask(id) {
+  const result = await pool.query(
+    `SELECT t.id, t.title, t.description, t.status, t.priority, t.due_date,
+            t.project_id, p.name AS project_name,
+            t.assignee_id, a.name AS assignee_name,
+            t.created_by, c.name AS creator_name,
+            t.created_at, t.updated_at
+     FROM tasks t
+     LEFT JOIN users a ON a.id = t.assignee_id
+     LEFT JOIN users c ON c.id = t.created_by
+     LEFT JOIN projects p ON p.id = t.project_id
+     WHERE t.id = $1`,
+    [id]
+  );
+  return result.rows[0];
 }
 
 // GET /tasks?project_id=...&status=todo&assignee_id=...&search=...
@@ -102,7 +125,7 @@ async function createTask(req, res) {
 
     await notifyAssignment(task.assignee_id, req.user.id, task.id, task.title);
 
-    res.status(201).json(task);
+    res.status(201).json(await getEnrichedTask(task.id));
   } catch (err) {
     console.error('Create task error:', err.message);
     res.status(500).json({ message: 'Internal server error' });
@@ -143,7 +166,7 @@ async function updateTask(req, res) {
       await notifyAssignment(task.assignee_id, req.user.id, task.id, task.title);
     }
 
-    res.json(task);
+    res.json(await getEnrichedTask(task.id));
   } catch (err) {
     console.error('Update task error:', err.message);
     res.status(500).json({ message: 'Internal server error' });
@@ -170,14 +193,16 @@ async function updateTaskStatus(req, res) {
 
     const task = result.rows[0];
     if (task.assignee_id) {
+      const message = `Task "${task.title}" moved to ${status}`;
       await pool.query(
         `INSERT INTO notifications (user_id, task_id, type, message)
          VALUES ($1, $2, 'status_change', $3)`,
-        [task.assignee_id, task.id, `Task "${task.title}" moved to ${status}`]
+        [task.assignee_id, task.id, message]
       );
+      notifyLineIfLinked(task.assignee_id, `🔄 ${message}`);
     }
 
-    res.json(task);
+    res.json(await getEnrichedTask(task.id));
   } catch (err) {
     console.error('Update task status error:', err.message);
     res.status(500).json({ message: 'Internal server error' });

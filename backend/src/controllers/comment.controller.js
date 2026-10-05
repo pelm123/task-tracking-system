@@ -1,4 +1,5 @@
 const pool = require('../config/db');
+const { notifyLineIfLinked } = require('../config/line');
 
 // GET /tasks/:taskId/comments
 async function listComments(req, res) {
@@ -42,16 +43,42 @@ async function createComment(req, res) {
 
     // notify the assignee (if there is one, and they didn't just comment on their own task)
     if (task.assignee_id && task.assignee_id !== req.user.id) {
+      const message = `New comment on "${task.title}"`;
       await pool.query(
         `INSERT INTO notifications (user_id, task_id, type, message)
          VALUES ($1, $2, 'comment', $3)`,
-        [task.assignee_id, task.id, `New comment on "${task.title}"`]
+        [task.assignee_id, task.id, message]
       );
+      notifyLineIfLinked(task.assignee_id, `💬 ${message}`);
     }
 
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error('Create comment error:', err.message);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+// PATCH /comments/:id — author only
+async function updateComment(req, res) {
+  const { content } = req.body;
+  if (!content || !content.trim()) {
+    return res.status(400).json({ message: 'content is required' });
+  }
+
+  try {
+    const result = await pool.query(
+      `UPDATE comments SET content = $1
+       WHERE id = $2 AND user_id = $3
+       RETURNING id, content, created_at, user_id`,
+      [content.trim(), req.params.id, req.user.id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Comment not found or not yours to edit' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Update comment error:', err.message);
     res.status(500).json({ message: 'Internal server error' });
   }
 }
@@ -73,4 +100,4 @@ async function deleteComment(req, res) {
   }
 }
 
-module.exports = { listComments, createComment, deleteComment };
+module.exports = { listComments, createComment, updateComment, deleteComment };
