@@ -10,7 +10,7 @@ const STATUS_COLORS = {
   done: 'var(--status-done)',
 };
 
-export default function KanbanColumn({ status, label, tasks, onTaskClick, onQuickAdd }) {
+export default function KanbanColumn({ status, label, tasks, onTaskClick, onQuickAdd, selectMode, selectedIds, onToggleSelect }) {
   const [draft, setDraft] = useState('');
 
   function handleAdd(e) {
@@ -22,7 +22,7 @@ export default function KanbanColumn({ status, label, tasks, onTaskClick, onQuic
   }
 
   return (
-    <div className={styles.column}>
+    <div className={styles.column} style={{ '--column-accent': STATUS_COLORS[status] }}>
       <div className={styles.columnHeader}>
         <div className={styles.columnTitle}>
           <span className={styles.dot} style={{ background: STATUS_COLORS[status] }} />
@@ -38,8 +38,19 @@ export default function KanbanColumn({ status, label, tasks, onTaskClick, onQuic
             {...provided.droppableProps}
             className={`${styles.cardList} ${snapshot.isDraggingOver ? styles.draggingOver : ''}`}
           >
+            {tasks.length === 0 && !snapshot.isDraggingOver && (
+              <div className={styles.emptyColumn}>No tasks here yet</div>
+            )}
             {tasks.map((task, index) => (
-              <TaskCard key={task.id} task={task} index={index} onClick={onTaskClick} />
+              <TaskCard
+                key={task.id}
+                task={task}
+                index={index}
+                onClick={onTaskClick}
+                selectMode={selectMode}
+                isSelected={selectedIds?.includes(task.id)}
+                onToggleSelect={onToggleSelect}
+              />
             ))}
             {provided.placeholder}
           </div>
