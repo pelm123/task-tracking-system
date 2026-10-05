@@ -33,7 +33,7 @@ async function createComment(req, res) {
   }
 
   try {
-    const taskCheck = await pool.query('SELECT id, assignee_id, title FROM tasks WHERE id = $1', [req.params.taskId]);
+    const taskCheck = await pool.query('SELECT id, title FROM tasks WHERE id = $1', [req.params.taskId]);
     if (taskCheck.rows.length === 0) {
       return res.status(404).json({ message: 'Task not found' });
     }
@@ -46,16 +46,24 @@ async function createComment(req, res) {
       [req.params.taskId, req.user.id, content.trim()]
     );
 
-    if (task.assignee_id && task.assignee_id !== req.user.id) {
+    const assigneesResult = await pool.query(
+      'SELECT user_id FROM task_assignees WHERE task_id = $1',
+      [task.id]
+    );
+    const assigneeIds = assigneesResult.rows.map((r) => r.user_id).filter((id) => id !== req.user.id);
+
+    if (assigneeIds.length > 0) {
       const authorResult = await pool.query('SELECT name FROM users WHERE id = $1', [req.user.id]);
       const authorName = authorResult.rows[0]?.name || 'Someone';
       const message = `${authorName} commented on "${task.title}": "${snippet(content)}"`;
-      await pool.query(
-        `INSERT INTO notifications (user_id, task_id, type, message)
-         VALUES ($1, $2, 'comment', $3)`,
-        [task.assignee_id, task.id, message]
-      );
-      notifyLineIfLinked(task.assignee_id, `💬 ${message}`);
+      for (const assigneeId of assigneeIds) {
+        await pool.query(
+          `INSERT INTO notifications (user_id, task_id, type, message)
+           VALUES ($1, $2, 'comment', $3)`,
+          [assigneeId, task.id, message]
+        );
+        notifyLineIfLinked(assigneeId, `💬 ${message}`);
+      }
     }
 
     res.status(201).json(result.rows[0]);
