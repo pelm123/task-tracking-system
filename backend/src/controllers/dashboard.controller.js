@@ -19,7 +19,8 @@ async function getSummary(req, res) {
       pool.query(
         `SELECT u.id, u.name, COUNT(t.id)::int AS count
          FROM users u
-         LEFT JOIN tasks t ON t.assignee_id = u.id AND t.status != 'done' ${project_id ? 'AND t.project_id = $1' : ''}
+         LEFT JOIN task_assignees ta ON ta.user_id = u.id
+         LEFT JOIN tasks t ON t.id = ta.task_id AND t.status != 'done' ${project_id ? 'AND t.project_id = $1' : ''}
          GROUP BY u.id, u.name
          ORDER BY count DESC`,
         params

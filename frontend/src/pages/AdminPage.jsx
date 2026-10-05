@@ -170,11 +170,7 @@ export default function AdminPage() {
                     <span className={styles.badge}>{STATUS_LABELS[t.status]}</span>
                   </td>
                   <td className={styles.muted}>{t.priority}</td>
-                  <td className={styles.muted}>
-                    {t.assignees && t.assignees.length > 0
-                      ? t.assignees.map((a) => a.name).join(', ')
-                      : 'Unassigned'}
-                  </td>
+                  <td className={styles.muted}>{t.assignee_name || 'Unassigned'}</td>
                   <td className={styles.muted}>{t.creator_name}</td>
                   <td className={styles.muted}>{formatDate(t.due_date)}</td>
                   <td>
