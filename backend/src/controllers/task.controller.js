@@ -3,6 +3,19 @@ const pool = require('../config/db');
 const VALID_STATUSES = ['todo', 'in_progress', 'review', 'done'];
 const VALID_PRIORITIES = ['low', 'medium', 'high'];
 
+async function notifyAssignment(assigneeId, actorId, taskId, taskTitle) {
+  if (!assigneeId || assigneeId === actorId) return; // don't notify yourself
+  try {
+    await pool.query(
+      `INSERT INTO notifications (user_id, task_id, type, message)
+       VALUES ($1, $2, 'assigned', $3)`,
+      [assigneeId, taskId, `You were assigned to "${taskTitle}"`]
+    );
+  } catch (err) {
+    console.error('notifyAssignment error:', err.message);
+  }
+}
+
 // GET /tasks?project_id=...&status=todo&assignee_id=...&search=...
 async function listTasks(req, res) {
   const { status, assignee_id, search, project_id } = req.query;
@@ -85,7 +98,11 @@ async function createTask(req, res) {
        RETURNING *`,
       [project_id, title, description || null, priority, due_date || null, assignee_id || null, req.user.id]
     );
-    res.status(201).json(result.rows[0]);
+    const task = result.rows[0];
+
+    await notifyAssignment(task.assignee_id, req.user.id, task.id, task.title);
+
+    res.status(201).json(task);
   } catch (err) {
     console.error('Create task error:', err.message);
     res.status(500).json({ message: 'Internal server error' });
@@ -101,6 +118,12 @@ async function updateTask(req, res) {
   }
 
   try {
+    const before = await pool.query('SELECT assignee_id FROM tasks WHERE id = $1', [req.params.id]);
+    if (before.rows.length === 0) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+    const previousAssigneeId = before.rows[0].assignee_id;
+
     const result = await pool.query(
       `UPDATE tasks SET
          title = COALESCE($1, title),
@@ -113,10 +136,14 @@ async function updateTask(req, res) {
       [title, description, priority, due_date, assignee_id, req.params.id]
     );
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ message: 'Task not found' });
+    const task = result.rows[0];
+
+    // only notify if the assignee actually changed to someone new
+    if (assignee_id && assignee_id !== previousAssigneeId) {
+      await notifyAssignment(task.assignee_id, req.user.id, task.id, task.title);
     }
-    res.json(result.rows[0]);
+
+    res.json(task);
   } catch (err) {
     console.error('Update task error:', err.message);
     res.status(500).json({ message: 'Internal server error' });
@@ -141,7 +168,6 @@ async function updateTaskStatus(req, res) {
       return res.status(404).json({ message: 'Task not found' });
     }
 
-    // Insert a status_change notification for the assignee (if any)
     const task = result.rows[0];
     if (task.assignee_id) {
       await pool.query(
@@ -216,6 +242,13 @@ async function bulkAssign(req, res) {
       `UPDATE tasks SET assignee_id = $1 WHERE id = ANY($2::uuid[]) RETURNING *`,
       [assignee_id || null, taskIds]
     );
+
+    if (assignee_id) {
+      for (const task of result.rows) {
+        await notifyAssignment(assignee_id, req.user.id, task.id, task.title);
+      }
+    }
+
     res.json(result.rows);
   } catch (err) {
     console.error('Bulk assign error:', err.message);

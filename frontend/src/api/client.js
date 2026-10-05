@@ -1,9 +1,10 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
-
+// In dev, requests go to /api and Vite's proxy (see vite.config.js) forwards
+// them to the backend on port 4000 — this means the frontend never needs to
+// know or care what host/IP it's being viewed from.
 const client = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: '/api',
 });
 
 // attach the JWT (if we have one) to every outgoing request
