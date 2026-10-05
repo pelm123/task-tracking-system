@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useProject } from '../context/ProjectContext';
 import NewProjectModal from './NewProjectModal';
+import NotificationBell from './NotificationBell';
 import styles from './appHeader.module.css';
 
 export default function AppHeader() {
@@ -108,6 +109,7 @@ export default function AppHeader() {
       </div>
 
       <div className={styles.right}>
+        <NotificationBell />
         <NavLink to="/profile" className={styles.userLabel} style={{ textDecoration: 'none' }}>
           {user?.name} · {user?.role}
         </NavLink>
