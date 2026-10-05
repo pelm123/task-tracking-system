@@ -1,6 +1,11 @@
 const pool = require('../config/db');
 const { notifyLineIfLinked } = require('../config/line');
 
+function snippet(text, maxLen = 60) {
+  const trimmed = text.trim();
+  return trimmed.length > maxLen ? `${trimmed.slice(0, maxLen)}…` : trimmed;
+}
+
 // GET /tasks/:taskId/comments
 async function listComments(req, res) {
   try {
@@ -41,9 +46,10 @@ async function createComment(req, res) {
       [req.params.taskId, req.user.id, content.trim()]
     );
 
-    // notify the assignee (if there is one, and they didn't just comment on their own task)
     if (task.assignee_id && task.assignee_id !== req.user.id) {
-      const message = `New comment on "${task.title}"`;
+      const authorResult = await pool.query('SELECT name FROM users WHERE id = $1', [req.user.id]);
+      const authorName = authorResult.rows[0]?.name || 'Someone';
+      const message = `${authorName} commented on "${task.title}": "${snippet(content)}"`;
       await pool.query(
         `INSERT INTO notifications (user_id, task_id, type, message)
          VALUES ($1, $2, 'comment', $3)`,

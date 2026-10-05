@@ -3,25 +3,24 @@ const { notifyLineIfLinked } = require('../config/line');
 
 const VALID_STATUSES = ['todo', 'in_progress', 'review', 'done'];
 const VALID_PRIORITIES = ['low', 'medium', 'high'];
+const STATUS_LABELS = { todo: 'To Do', in_progress: 'In Progress', review: 'Review', done: 'Done' };
 
-async function notifyAssignment(assigneeId, actorId, taskId, taskTitle) {
-  if (!assigneeId || assigneeId === actorId) return; // don't notify yourself
-  const message = `You were assigned to "${taskTitle}"`;
-  try {
-    await pool.query(
-      `INSERT INTO notifications (user_id, task_id, type, message)
-       VALUES ($1, $2, 'assigned', $3)`,
-      [assigneeId, taskId, message]
-    );
-  } catch (err) {
-    console.error('notifyAssignment error:', err.message);
-  }
-  notifyLineIfLinked(assigneeId, `📋 ${message}`);
+async function getUserName(userId) {
+  if (!userId) return null;
+  const result = await pool.query('SELECT name FROM users WHERE id = $1', [userId]);
+  return result.rows[0]?.name || null;
 }
 
-// Re-fetches a task WITH its joined display fields (assignee_name, creator_name,
-// project_name) — a plain "UPDATE ... RETURNING *" only has raw columns, which
-// left the frontend with tasks missing their assignee name until a full reload.
+function formatDueDate(dueDate) {
+  if (!dueDate) return 'no due date';
+  return new Date(dueDate).toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
 async function getEnrichedTask(id) {
   const result = await pool.query(
     `SELECT t.id, t.title, t.description, t.status, t.priority, t.due_date,
@@ -37,6 +36,24 @@ async function getEnrichedTask(id) {
     [id]
   );
   return result.rows[0];
+}
+
+// task must already be the ENRICHED version (has project_name, priority, due_date)
+async function notifyAssignment(task, actorId) {
+  if (!task.assignee_id || task.assignee_id === actorId) return; // don't notify yourself
+  const actorName = await getUserName(actorId);
+  const priorityLabel = task.priority.charAt(0).toUpperCase() + task.priority.slice(1);
+  const message = `${actorName} assigned you to "${task.title}" (${priorityLabel} priority, due ${formatDueDate(task.due_date)}) in ${task.project_name}`;
+  try {
+    await pool.query(
+      `INSERT INTO notifications (user_id, task_id, type, message)
+       VALUES ($1, $2, 'assigned', $3)`,
+      [task.assignee_id, task.id, message]
+    );
+  } catch (err) {
+    console.error('notifyAssignment error:', err.message);
+  }
+  notifyLineIfLinked(task.assignee_id, `📋 ${message}`);
 }
 
 // GET /tasks?project_id=...&status=todo&assignee_id=...&search=...
@@ -118,14 +135,14 @@ async function createTask(req, res) {
     const result = await pool.query(
       `INSERT INTO tasks (project_id, title, description, priority, due_date, assignee_id, created_by)
        VALUES ($1, $2, $3, COALESCE($4::task_priority, 'medium'), $5, $6, $7)
-       RETURNING *`,
+       RETURNING id`,
       [project_id, title, description || null, priority, due_date || null, assignee_id || null, req.user.id]
     );
-    const task = result.rows[0];
 
-    await notifyAssignment(task.assignee_id, req.user.id, task.id, task.title);
+    const task = await getEnrichedTask(result.rows[0].id);
+    await notifyAssignment(task, req.user.id);
 
-    res.status(201).json(await getEnrichedTask(task.id));
+    res.status(201).json(task);
   } catch (err) {
     console.error('Create task error:', err.message);
     res.status(500).json({ message: 'Internal server error' });
@@ -155,18 +172,17 @@ async function updateTask(req, res) {
          due_date = COALESCE($4, due_date),
          assignee_id = COALESCE($5, assignee_id)
        WHERE id = $6
-       RETURNING *`,
+       RETURNING id`,
       [title, description, priority, due_date, assignee_id, req.params.id]
     );
 
-    const task = result.rows[0];
+    const task = await getEnrichedTask(result.rows[0].id);
 
-    // only notify if the assignee actually changed to someone new
     if (assignee_id && assignee_id !== previousAssigneeId) {
-      await notifyAssignment(task.assignee_id, req.user.id, task.id, task.title);
+      await notifyAssignment(task, req.user.id);
     }
 
-    res.json(await getEnrichedTask(task.id));
+    res.json(task);
   } catch (err) {
     console.error('Update task error:', err.message);
     res.status(500).json({ message: 'Internal server error' });
@@ -182,18 +198,22 @@ async function updateTaskStatus(req, res) {
   }
 
   try {
+    const before = await pool.query('SELECT status FROM tasks WHERE id = $1', [req.params.id]);
+    if (before.rows.length === 0) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+    const previousStatus = before.rows[0].status;
+
     const result = await pool.query(
-      `UPDATE tasks SET status = $1::task_status WHERE id = $2 RETURNING *`,
+      `UPDATE tasks SET status = $1::task_status WHERE id = $2 RETURNING id`,
       [status, req.params.id]
     );
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ message: 'Task not found' });
-    }
+    const task = await getEnrichedTask(result.rows[0].id);
 
-    const task = result.rows[0];
     if (task.assignee_id) {
-      const message = `Task "${task.title}" moved to ${status}`;
+      const actorName = await getUserName(req.user.id);
+      const message = `${actorName} moved "${task.title}" from ${STATUS_LABELS[previousStatus]} \u2192 ${STATUS_LABELS[status]}`;
       await pool.query(
         `INSERT INTO notifications (user_id, task_id, type, message)
          VALUES ($1, $2, 'status_change', $3)`,
@@ -202,7 +222,7 @@ async function updateTaskStatus(req, res) {
       notifyLineIfLinked(task.assignee_id, `🔄 ${message}`);
     }
 
-    res.json(await getEnrichedTask(task.id));
+    res.json(task);
   } catch (err) {
     console.error('Update task status error:', err.message);
     res.status(500).json({ message: 'Internal server error' });
@@ -231,7 +251,7 @@ async function deleteTask(req, res) {
   }
 }
 
-// PATCH /tasks/bulk/status — { taskIds: [...], status: 'done' }
+// PATCH /tasks/bulk/status
 async function bulkUpdateStatus(req, res) {
   const { taskIds, status } = req.body;
 
@@ -254,7 +274,7 @@ async function bulkUpdateStatus(req, res) {
   }
 }
 
-// PATCH /tasks/bulk/assign — { taskIds: [...], assignee_id: uuid|null }
+// PATCH /tasks/bulk/assign
 async function bulkAssign(req, res) {
   const { taskIds, assignee_id } = req.body;
 
@@ -264,24 +284,25 @@ async function bulkAssign(req, res) {
 
   try {
     const result = await pool.query(
-      `UPDATE tasks SET assignee_id = $1 WHERE id = ANY($2::uuid[]) RETURNING *`,
+      `UPDATE tasks SET assignee_id = $1 WHERE id = ANY($2::uuid[]) RETURNING id`,
       [assignee_id || null, taskIds]
     );
 
     if (assignee_id) {
-      for (const task of result.rows) {
-        await notifyAssignment(assignee_id, req.user.id, task.id, task.title);
+      for (const row of result.rows) {
+        const task = await getEnrichedTask(row.id);
+        await notifyAssignment(task, req.user.id);
       }
     }
 
-    res.json(result.rows);
+    res.json(await Promise.all(result.rows.map((r) => getEnrichedTask(r.id))));
   } catch (err) {
     console.error('Bulk assign error:', err.message);
     res.status(500).json({ message: 'Internal server error' });
   }
 }
 
-// DELETE /tasks/bulk — { taskIds: [...] }
+// DELETE /tasks/bulk
 async function bulkDelete(req, res) {
   const { taskIds } = req.body;
 
