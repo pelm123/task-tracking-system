@@ -1,5 +1,4 @@
 import { useEffect, useState, useRef } from 'react';
-import { useAuth } from '../context/AuthContext';
 import * as commentsApi from '../api/comments';
 import * as attachmentsApi from '../api/attachments';
 import styles from './modal.module.css';
@@ -15,25 +14,16 @@ function timeAgo(dateStr) {
 }
 
 export default function TaskDetailModal({ task, users, onClose, onUpdate, onDelete }) {
-  const { user: currentUser } = useAuth();
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description || '');
   const [priority, setPriority] = useState(task.priority);
-  const [assigneeIds, setAssigneeIds] = useState((task.assignees || []).map((a) => a.id));
+  const [assigneeId, setAssigneeId] = useState(task.assignee_id || '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-
-  function toggleAssignee(userId) {
-    setAssigneeIds((prev) =>
-      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
-    );
-  }
 
   const [comments, setComments] = useState([]);
   const [commentDraft, setCommentDraft] = useState('');
   const [loadingComments, setLoadingComments] = useState(true);
-  const [editingCommentId, setEditingCommentId] = useState(null);
-  const [editDraft, setEditDraft] = useState('');
 
   const [attachments, setAttachments] = useState([]);
   const [uploading, setUploading] = useState(false);
@@ -55,7 +45,7 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
         title: title.trim(),
         description: description.trim(),
         priority,
-        assignee_ids: assigneeIds,
+        assignee_id: assigneeId || null,
       });
     } catch (err) {
       setError(err.response?.data?.message || 'Could not save changes');
@@ -80,37 +70,10 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
     if (!content) return;
     try {
       const created = await commentsApi.createComment(task.id, content);
-      setComments((prev) => [...prev, { ...created, author_name: currentUser.name }]);
+      setComments((prev) => [...prev, created]);
       setCommentDraft('');
     } catch (err) {
       setError('Could not post comment');
-    }
-  }
-
-  function startEditingComment(c) {
-    setEditingCommentId(c.id);
-    setEditDraft(c.content);
-  }
-
-  async function handleSaveCommentEdit(commentId) {
-    const content = editDraft.trim();
-    if (!content) return;
-    try {
-      const updated = await commentsApi.updateComment(commentId, content);
-      setComments((prev) => prev.map((c) => (c.id === commentId ? { ...c, content: updated.content } : c)));
-      setEditingCommentId(null);
-    } catch (err) {
-      setError('Could not save comment edit');
-    }
-  }
-
-  async function handleDeleteComment(commentId) {
-    if (!window.confirm('Delete this comment?')) return;
-    try {
-      await commentsApi.deleteComment(commentId);
-      setComments((prev) => prev.filter((c) => c.id !== commentId));
-    } catch (err) {
-      setError('Could not delete comment');
     }
   }
 
@@ -172,24 +135,15 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
           </div>
 
           <div className={styles.field}>
-            <label>
-              Assign to{assigneeIds.length > 0 && ` (${assigneeIds.length} selected)`}
-            </label>
-            <div className={styles.assigneeList}>
-              {users.length === 0 && <p className={styles.emptyText}>No users available.</p>}
+            <label htmlFor="dAssignee">Assign to</label>
+            <select id="dAssignee" value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}>
+              <option value="">Unassigned</option>
               {users.map((u) => (
-                <label key={u.id} className={styles.assigneeRow}>
-                  <input
-                    type="checkbox"
-                    checked={assigneeIds.includes(u.id)}
-                    onChange={() => toggleAssignee(u.id)}
-                  />
-                  <span className={styles.assigneeName}>
-                    {u.name} <span className={styles.assigneeRole}>({u.role})</span>
-                  </span>
-                </label>
+                <option key={u.id} value={u.id}>
+                  {u.name} ({u.role})
+                </option>
               ))}
-            </div>
+            </select>
           </div>
         </div>
 
@@ -217,44 +171,9 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
                 <div key={c.id} className={styles.commentItem}>
                   <div className={styles.commentMeta}>
                     <span>{c.author_name}</span>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      {timeAgo(c.created_at)}
-                      {c.user_id === currentUser.id && editingCommentId !== c.id && (
-                        <>
-                          <button
-                            onClick={() => startEditingComment(c)}
-                            style={{ background: 'none', border: 'none', color: 'var(--color-accent)', cursor: 'pointer', fontSize: 12, padding: 0 }}
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => handleDeleteComment(c.id)}
-                            style={{ background: 'none', border: 'none', color: 'var(--priority-high)', cursor: 'pointer', fontSize: 12, padding: 0 }}
-                          >
-                            Delete
-                          </button>
-                        </>
-                      )}
-                    </span>
+                    <span>{timeAgo(c.created_at)}</span>
                   </div>
-                  {editingCommentId === c.id ? (
-                    <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
-                      <input
-                        value={editDraft}
-                        onChange={(e) => setEditDraft(e.target.value)}
-                        style={{ flex: 1 }}
-                        autoFocus
-                      />
-                      <button className={styles.btnPrimary} onClick={() => handleSaveCommentEdit(c.id)}>
-                        Save
-                      </button>
-                      <button className={styles.btnGhost} onClick={() => setEditingCommentId(null)}>
-                        Cancel
-                      </button>
-                    </div>
-                  ) : (
-                    <p className={styles.commentBody}>{c.content}</p>
-                  )}
+                  <p className={styles.commentBody}>{c.content}</p>
                 </div>
               ))}
             </div>
