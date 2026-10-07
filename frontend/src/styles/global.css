@@ -28,7 +28,7 @@
   --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.4);
 
   /* Type */
-  --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-ui: 'Inter', 'Noto Sans Thai', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-display: 'Newsreader', Georgia, serif;
 
   /* Layout */

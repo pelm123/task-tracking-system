@@ -6,6 +6,7 @@ import AdminRoute from './components/AdminRoute';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import BoardPage from './pages/BoardPage';
+import CalendarPage from './pages/CalendarPage';
 import DashboardPage from './pages/DashboardPage';
 import AdminPage from './pages/AdminPage';
 import ProfilePage from './pages/ProfilePage';
@@ -38,6 +39,14 @@ export default function App() {
             element={
               <AuthedLayout>
                 <BoardPage />
+              </AuthedLayout>
+            }
+          />
+          <Route
+            path="/calendar"
+            element={
+              <AuthedLayout>
+                <CalendarPage />
               </AuthedLayout>
             }
           />

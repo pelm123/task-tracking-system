@@ -92,6 +92,12 @@ export default function AppHeader() {
             Board
           </NavLink>
           <NavLink
+            to="/calendar"
+            className={({ isActive }) => `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`}
+          >
+            Calendar
+          </NavLink>
+          <NavLink
             to="/dashboard"
             className={({ isActive }) => `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`}
           >

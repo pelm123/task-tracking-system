@@ -69,6 +69,46 @@
   width: 100%;
 }
 
+.field input[type='checkbox'] {
+  width: auto;
+  flex-shrink: 0;
+}
+
+.assigneeList {
+  max-height: 150px;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+}
+
+.assigneeRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 2px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.assigneeRow:last-child {
+  border-bottom: none;
+}
+
+.assigneeRow:hover {
+  color: var(--color-text);
+}
+
+.assigneeName {
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+.assigneeRole {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
 .field textarea {
   resize: vertical;
   min-height: 70px;
