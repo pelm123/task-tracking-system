@@ -14,7 +14,8 @@
     "react-router-dom": "^6.26.0",
     "axios": "^1.7.4",
     "@hello-pangea/dnd": "^17.0.0",
-    "recharts": "^2.12.7"
+    "recharts": "^2.12.7",
+    "socket.io-client": "^4.7.5"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",

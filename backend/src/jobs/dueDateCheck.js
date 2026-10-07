@@ -16,15 +16,16 @@ function formatDueDate(dueDate) {
 async function checkDueSoonTasks() {
   try {
     const result = await pool.query(
-      `SELECT t.id, t.title, t.due_date, t.priority, t.assignee_id
+      `SELECT t.id, t.title, t.due_date, t.priority, ta.user_id AS assignee_id
        FROM tasks t
+       JOIN task_assignees ta ON ta.task_id = t.id
        WHERE t.status != 'done'
-         AND t.assignee_id IS NOT NULL
          AND t.due_date IS NOT NULL
          AND t.due_date BETWEEN now() AND now() + interval '${DUE_SOON_WINDOW_HOURS} hours'
          AND NOT EXISTS (
            SELECT 1 FROM notifications n
            WHERE n.task_id = t.id
+             AND n.user_id = ta.user_id
              AND n.type = 'due_soon'
              AND n.created_at > now() - interval '${DUE_SOON_WINDOW_HOURS} hours'
          )`
