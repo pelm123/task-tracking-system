@@ -3,6 +3,7 @@ import { DragDropContext } from '@hello-pangea/dnd';
 import { useProject } from '../context/ProjectContext';
 import * as tasksApi from '../api/tasks';
 import * as usersApi from '../api/users';
+import socket from '../api/socket';
 import KanbanColumn from '../components/KanbanColumn';
 import NewTaskModal from '../components/NewTaskModal';
 import TaskDetailModal from '../components/TaskDetailModal';
@@ -60,6 +61,37 @@ export default function BoardPage() {
     loadTasks();
     usersApi.listUsers().then(setUsers).catch(() => {});
   }, [loadTasks]);
+
+  // live sync: join the current project's room and apply changes other
+  // people make — drag-and-drop, create, edit, delete — the moment they
+  // happen, no refresh needed
+  useEffect(() => {
+    if (!currentProjectId) return;
+    socket.emit('join-project', currentProjectId);
+
+    function handleUpserted(task) {
+      if (task.project_id !== currentProjectId) return;
+      setTasks((prev) => {
+        const exists = prev.some((t) => t.id === task.id);
+        return exists ? prev.map((t) => (t.id === task.id ? task : t)) : [task, ...prev];
+      });
+      setSelectedTask((prev) => (prev && prev.id === task.id ? task : prev));
+    }
+
+    function handleDeleted({ id }) {
+      setTasks((prev) => prev.filter((t) => t.id !== id));
+      setSelectedTask((prev) => (prev && prev.id === id ? null : prev));
+    }
+
+    socket.on('task:upserted', handleUpserted);
+    socket.on('task:deleted', handleDeleted);
+
+    return () => {
+      socket.emit('leave-project', currentProjectId);
+      socket.off('task:upserted', handleUpserted);
+      socket.off('task:deleted', handleDeleted);
+    };
+  }, [currentProjectId]);
 
   async function handleDragEnd(result) {
     const { source, destination, draggableId } = result;

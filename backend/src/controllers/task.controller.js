@@ -18,6 +18,16 @@ const ASSIGNEES_SUBQUERY = `
   ) AS assignees
 `;
 
+// broadcasts a task change to every browser tab currently viewing this
+// project's board, so drag-and-drop/create/edit/delete show up live for
+// everyone without a refresh
+function broadcastTask(req, projectId, event, payload) {
+  const io = req.app.get('io');
+  if (io && projectId) {
+    io.to(`project:${projectId}`).emit(event, payload);
+  }
+}
+
 async function getUserName(userId) {
   if (!userId) return null;
   const result = await pool.query('SELECT name FROM users WHERE id = $1', [userId]);
@@ -178,6 +188,7 @@ async function createTask(req, res) {
     const newlyAssigned = await setTaskAssignees(taskId, assignee_ids);
     const task = await getEnrichedTask(taskId);
     await notifyAssignees(task, newlyAssigned, req.user.id);
+    broadcastTask(req, task.project_id, 'task:upserted', task);
 
     res.status(201).json(task);
   } catch (err) {
@@ -223,6 +234,7 @@ async function updateTask(req, res) {
     if (newlyAssigned.length > 0) {
       await notifyAssignees(task, newlyAssigned, req.user.id);
     }
+    broadcastTask(req, task.project_id, 'task:upserted', task);
 
     res.json(task);
   } catch (err) {
@@ -263,6 +275,7 @@ async function updateTaskStatus(req, res) {
         notifyLineIfLinked(assignee.id, `🔄 ${message}`);
       }
     }
+    broadcastTask(req, task.project_id, 'task:upserted', task);
 
     res.json(task);
   } catch (err) {
@@ -274,7 +287,7 @@ async function updateTaskStatus(req, res) {
 // DELETE /tasks/:id — admin/pm, or the task's own creator
 async function deleteTask(req, res) {
   try {
-    const existing = await pool.query('SELECT created_by FROM tasks WHERE id = $1', [req.params.id]);
+    const existing = await pool.query('SELECT created_by, project_id FROM tasks WHERE id = $1', [req.params.id]);
     if (existing.rows.length === 0) {
       return res.status(404).json({ message: 'Task not found' });
     }
@@ -286,6 +299,7 @@ async function deleteTask(req, res) {
     }
 
     await pool.query('DELETE FROM tasks WHERE id = $1', [req.params.id]);
+    broadcastTask(req, existing.rows[0].project_id, 'task:deleted', { id: req.params.id });
     res.status(204).send();
   } catch (err) {
     console.error('Delete task error:', err.message);
@@ -309,7 +323,11 @@ async function bulkUpdateStatus(req, res) {
       `UPDATE tasks SET status = $1::task_status WHERE id = ANY($2::uuid[]) RETURNING id`,
       [status, taskIds]
     );
-    res.json(await Promise.all(result.rows.map((r) => getEnrichedTask(r.id))));
+    const updated = await Promise.all(result.rows.map((r) => getEnrichedTask(r.id)));
+    for (const task of updated) {
+      broadcastTask(req, task.project_id, 'task:upserted', task);
+    }
+    res.json(updated);
   } catch (err) {
     console.error('Bulk update status error:', err.message);
     res.status(500).json({ message: 'Internal server error' });
@@ -343,7 +361,11 @@ async function bulkAssign(req, res) {
       }
     }
 
-    res.json(await Promise.all(taskIds.map((id) => getEnrichedTask(id))));
+    const updated = await Promise.all(taskIds.map((id) => getEnrichedTask(id)));
+    for (const task of updated) {
+      broadcastTask(req, task.project_id, 'task:upserted', task);
+    }
+    res.json(updated);
   } catch (err) {
     console.error('Bulk assign error:', err.message);
     res.status(500).json({ message: 'Internal server error' });
@@ -359,7 +381,14 @@ async function bulkDelete(req, res) {
   }
 
   try {
+    const existing = await pool.query(
+      `SELECT id, project_id FROM tasks WHERE id = ANY($1::uuid[])`,
+      [taskIds]
+    );
     await pool.query(`DELETE FROM tasks WHERE id = ANY($1::uuid[])`, [taskIds]);
+    for (const row of existing.rows) {
+      broadcastTask(req, row.project_id, 'task:deleted', { id: row.id });
+    }
     res.status(204).send();
   } catch (err) {
     console.error('Bulk delete error:', err.message);
