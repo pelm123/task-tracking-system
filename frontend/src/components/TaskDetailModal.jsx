@@ -35,6 +35,11 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
   // updateTask.
   const isAssignee = (task.assignees || []).some((a) => a.id === currentUser.id);
   const canReschedule = currentUser.role !== 'member' || isAssignee;
+  // A member who isn't assigned to this task yet can't assign it (to
+  // themselves or anyone else), comment on it, or upload files to it —
+  // only a PM/admin assigning them changes that. Mirrors the backend
+  // checks in updateTask/createComment/uploadAttachment.
+  const isUnassignedMember = currentUser.role === 'member' && !isAssignee;
 
   function toggleAssignee(userId) {
     setAssigneeIds((prev) =>
@@ -69,14 +74,19 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
     setError('');
     try {
       await onUpdate(task.id, {
-        title: title.trim(),
-        description: description.trim(),
-        priority,
+        // an unassigned member can't edit title/description/priority either
+        // — every field below is disabled in that case, but echo back the
+        // original values regardless so a stray save is always a no-op
+        title: isUnassignedMember ? task.title : title.trim(),
+        description: isUnassignedMember ? task.description || '' : description.trim(),
+        priority: isUnassignedMember ? task.priority : priority,
         // only send a due_date change when the person was actually allowed
         // to make one — a disabled input never changes, but this keeps the
         // request honest even if that ever stops being true
         due_date: canReschedule ? dueDate || null : toDateInputValue(task.due_date) || null,
-        assignee_ids: assigneeIds,
+        // an unassigned member can't change who's assigned — send the
+        // original set back unchanged even if local state somehow drifted
+        assignee_ids: isUnassignedMember ? (task.assignees || []).map((a) => a.id) : assigneeIds,
       });
     } catch (err) {
       setError(err.response?.data?.message || 'Could not save changes');
@@ -168,9 +178,20 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
           </button>
         </div>
 
+        {isUnassignedMember && (
+          <p className={styles.emptyText} style={{ margin: '0 0 12px' }}>
+            You're not assigned to this task, so you can view it but can't edit it.
+          </p>
+        )}
+
         <div className={styles.field}>
           <label htmlFor="dTitle">Title</label>
-          <input id="dTitle" value={title} onChange={(e) => setTitle(e.target.value)} />
+          <input
+            id="dTitle"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            disabled={isUnassignedMember}
+          />
         </div>
 
         <div className={styles.field}>
@@ -179,13 +200,19 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
             id="dDescription"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
+            disabled={isUnassignedMember}
           />
         </div>
 
         <div className={styles.row}>
           <div className={styles.field}>
             <label htmlFor="dPriority">Priority</label>
-            <select id="dPriority" value={priority} onChange={(e) => setPriority(e.target.value)}>
+            <select
+              id="dPriority"
+              value={priority}
+              onChange={(e) => setPriority(e.target.value)}
+              disabled={isUnassignedMember}
+            >
               <option value="low">Low</option>
               <option value="medium">Medium</option>
               <option value="high">High</option>
@@ -221,6 +248,7 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
                     type="checkbox"
                     checked={assigneeIds.includes(u.id)}
                     onChange={() => toggleAssignee(u.id)}
+                    disabled={isUnassignedMember}
                   />
                   <span className={styles.assigneeName}>
                     {u.name} <span className={styles.assigneeRole}>({u.role})</span>
@@ -228,6 +256,11 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
                 </label>
               ))}
             </div>
+            {isUnassignedMember && (
+              <p className={styles.emptyText} style={{ marginTop: 4 }}>
+                A PM/admin has to assign you to this task before you can assign it to yourself or others.
+              </p>
+            )}
           </div>
         </div>
 
@@ -261,9 +294,11 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
               </button>
             </>
           )}
-          <button className={styles.btnPrimary} onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving…' : 'Save changes'}
-          </button>
+          {!isUnassignedMember && (
+            <button className={styles.btnPrimary} onClick={handleSave} disabled={saving}>
+              {saving ? 'Saving…' : 'Save changes'}
+            </button>
+          )}
         </div>
 
         <div className={styles.section}>
@@ -322,16 +357,22 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
             </div>
           )}
 
-          <form className={styles.commentForm} onSubmit={handleAddComment}>
-            <input
-              placeholder="Write a comment…"
-              value={commentDraft}
-              onChange={(e) => setCommentDraft(e.target.value)}
-            />
-            <button type="submit" className={styles.btnPrimary}>
-              Post
-            </button>
-          </form>
+          {isUnassignedMember ? (
+            <p className={styles.emptyText} style={{ marginTop: 8 }}>
+              You're not assigned to this task, so you can't comment on it.
+            </p>
+          ) : (
+            <form className={styles.commentForm} onSubmit={handleAddComment}>
+              <input
+                placeholder="Write a comment…"
+                value={commentDraft}
+                onChange={(e) => setCommentDraft(e.target.value)}
+              />
+              <button type="submit" className={styles.btnPrimary}>
+                Post
+              </button>
+            </form>
+          )}
         </div>
 
         <div className={styles.section}>
@@ -354,8 +395,16 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
             </div>
           )}
 
-          <input type="file" ref={fileInputRef} onChange={handleFileSelect} disabled={uploading} />
-          {uploading && <p className={styles.emptyText}>Uploading…</p>}
+          {isUnassignedMember ? (
+            <p className={styles.emptyText} style={{ marginTop: 8 }}>
+              You're not assigned to this task, so you can't upload files to it.
+            </p>
+          ) : (
+            <>
+              <input type="file" ref={fileInputRef} onChange={handleFileSelect} disabled={uploading} />
+              {uploading && <p className={styles.emptyText}>Uploading…</p>}
+            </>
+          )}
         </div>
       </div>
     </div>
