@@ -89,19 +89,19 @@ export default function DashboardPage() {
       <p className={styles.subLine}>A snapshot of where the project stands right now.</p>
 
       <div className={styles.statCards}>
-        <div className={styles.statCard}>
+        <div className={styles.statCard} style={{ '--stat-accent': 'var(--color-text-muted)' }}>
           <div className={styles.statValue}>{summary.totalTasks}</div>
           <div className={styles.statLabel}>Total tasks</div>
         </div>
-        <div className={styles.statCard}>
+        <div className={styles.statCard} style={{ '--stat-accent': 'var(--status-done)' }}>
           <div className={styles.statValue}>{summary.byStatus.done}</div>
           <div className={styles.statLabel}>Completed</div>
         </div>
-        <div className={styles.statCard}>
+        <div className={styles.statCard} style={{ '--stat-accent': 'var(--status-in-progress)' }}>
           <div className={styles.statValue}>{summary.byStatus.in_progress}</div>
           <div className={styles.statLabel}>In progress</div>
         </div>
-        <div className={styles.statCard}>
+        <div className={styles.statCard} style={{ '--stat-accent': 'var(--priority-high)' }}>
           <div className={`${styles.statValue} ${summary.overdueCount > 0 ? styles.statValueWarn : ''}`}>
             {summary.overdueCount}
           </div>
@@ -176,27 +176,21 @@ export default function DashboardPage() {
             Nothing yet.
           </p>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div>
             {activity.map((a, i) => (
-              <div
-                key={i}
-                style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  gap: 12,
-                  fontSize: 13,
-                  paddingBottom: 10,
-                  borderBottom: i < activity.length - 1 ? '1px solid var(--color-border)' : 'none',
-                }}
-              >
+              <div key={i} className={styles.activityItem}>
                 <span>
+                  <span
+                    className={styles.activityDot}
+                    style={{
+                      background: a.type === 'task_created' ? 'var(--status-done)' : 'var(--status-review)',
+                    }}
+                  />
                   <strong>{a.actor_name}</strong>{' '}
                   {a.type === 'task_created' ? 'created' : 'commented on'}{' '}
                   <span style={{ color: 'var(--color-accent)' }}>{a.task_title}</span>
                 </span>
-                <span style={{ color: 'var(--color-text-muted)', whiteSpace: 'nowrap' }}>
-                  {timeAgo(a.at)}
-                </span>
+                <span className={styles.activityTime}>{timeAgo(a.at)}</span>
               </div>
             ))}
           </div>

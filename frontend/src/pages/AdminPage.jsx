@@ -5,10 +5,21 @@ import * as tasksApi from '../api/tasks';
 import styles from './admin.module.css';
 
 const STATUS_LABELS = { todo: 'To Do', in_progress: 'In Progress', review: 'Review', done: 'Done' };
+const STATUS_COLORS = {
+  todo: 'var(--status-todo)',
+  in_progress: 'var(--status-in-progress)',
+  review: 'var(--status-review)',
+  done: 'var(--status-done)',
+};
 
 function formatDate(dateStr) {
   if (!dateStr) return '—';
   return new Date(dateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function initials(name) {
+  if (!name) return '?';
+  return name.charAt(0).toUpperCase();
 }
 
 export default function AdminPage() {
@@ -86,14 +97,14 @@ export default function AdminPage() {
             className={`${styles.tabBtn} ${tab === 'users' ? styles.tabBtnActive : ''}`}
             onClick={() => setTab('users')}
           >
-            Users ({users.length})
+            Users <span className={styles.muted}>({users.length})</span>
           </button>
         )}
         <button
           className={`${styles.tabBtn} ${tab === 'tasks' ? styles.tabBtnActive : ''}`}
           onClick={() => setTab('tasks')}
         >
-          Tasks ({tasks.length})
+          Tasks <span className={styles.muted}>({tasks.length})</span>
         </button>
       </div>
 
@@ -110,9 +121,21 @@ export default function AdminPage() {
               </tr>
             </thead>
             <tbody>
+              {users.length === 0 && (
+                <tr>
+                  <td colSpan={5} className={styles.emptyRow}>
+                    No users yet.
+                  </td>
+                </tr>
+              )}
               {users.map((u) => (
                 <tr key={u.id}>
-                  <td>{u.name}</td>
+                  <td>
+                    <div className={styles.userCell}>
+                      <span className={styles.avatar}>{initials(u.name)}</span>
+                      {u.name}
+                    </div>
+                  </td>
                   <td className={styles.muted}>{u.email}</td>
                   <td>
                     <select
@@ -134,7 +157,7 @@ export default function AdminPage() {
                   <td className={styles.muted}>{formatDate(u.created_at)}</td>
                   <td>
                     {u.id !== currentUser.id && (
-                      <button className={styles.actionBtn} onClick={() => handleDeleteUser(u.id)}>
+                      <button className="btn btn-danger" onClick={() => handleDeleteUser(u.id)}>
                         Delete
                       </button>
                     )}
@@ -162,12 +185,21 @@ export default function AdminPage() {
               </tr>
             </thead>
             <tbody>
+              {tasks.length === 0 && (
+                <tr>
+                  <td colSpan={8} className={styles.emptyRow}>
+                    No tasks yet.
+                  </td>
+                </tr>
+              )}
               {tasks.map((t) => (
                 <tr key={t.id}>
                   <td>{t.title}</td>
                   <td className={styles.muted}>{t.project_name}</td>
                   <td>
-                    <span className={styles.badge}>{STATUS_LABELS[t.status]}</span>
+                    <span className={styles.badge} style={{ color: STATUS_COLORS[t.status] }}>
+                      {STATUS_LABELS[t.status]}
+                    </span>
                   </td>
                   <td className={styles.muted}>{t.priority}</td>
                   <td className={styles.muted}>
@@ -178,7 +210,7 @@ export default function AdminPage() {
                   <td className={styles.muted}>{t.creator_name}</td>
                   <td className={styles.muted}>{formatDate(t.due_date)}</td>
                   <td>
-                    <button className={styles.actionBtn} onClick={() => handleDeleteTask(t.id)}>
+                    <button className="btn btn-danger" onClick={() => handleDeleteTask(t.id)}>
                       Delete
                     </button>
                   </td>
