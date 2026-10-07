@@ -2,7 +2,9 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import * as authApi from '../api/auth';
 import * as lineApi from '../api/line';
-import styles from './auth.module.css';
+import styles from './profile.module.css';
+
+const ROLE_LABELS = { admin: 'Admin', pm: 'Project manager', member: 'Team member' };
 
 export default function ProfilePage() {
   const { user, updateUser } = useAuth();
@@ -70,92 +72,89 @@ export default function ProfilePage() {
   }
 
   return (
-    <div style={{ padding: '28px 32px', maxWidth: 420 }}>
-      <h1 style={{ fontSize: 26, marginBottom: 4 }}>Profile</h1>
-      <p style={{ color: 'var(--color-text-muted)', fontSize: 13, marginBottom: 28 }}>
-        {user?.email} · {user?.role}
-      </p>
-
-      <form onSubmit={handleNameSubmit} style={{ marginBottom: 32 }}>
-        <div className={styles.field}>
-          <label htmlFor="profileName">Name</label>
-          <input id="profileName" value={name} onChange={(e) => setName(e.target.value)} />
-        </div>
-        {nameError && <p className={styles.errorText}>{nameError}</p>}
-        {nameMsg && <p style={{ color: 'var(--status-done)', fontSize: 13, marginTop: -6, marginBottom: 12 }}>{nameMsg}</p>}
-        <button type="submit" className="btn btn-primary" disabled={nameSaving}>
-          {nameSaving ? 'Saving…' : 'Save name'}
-        </button>
-      </form>
-
-      <h2 style={{ fontSize: 16, marginBottom: 14 }}>Change password</h2>
-      <form onSubmit={handlePasswordSubmit} style={{ marginBottom: 32 }}>
-        <div className={styles.field}>
-          <label htmlFor="currentPw">Current password</label>
-          <input
-            id="currentPw"
-            type="password"
-            value={currentPassword}
-            onChange={(e) => setCurrentPassword(e.target.value)}
-          />
-        </div>
-        <div className={styles.field}>
-          <label htmlFor="newPw">New password</label>
-          <input
-            id="newPw"
-            type="password"
-            minLength={6}
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-          />
-        </div>
-        {pwError && <p className={styles.errorText}>{pwError}</p>}
-        {pwMsg && <p style={{ color: 'var(--status-done)', fontSize: 13, marginTop: -6, marginBottom: 12 }}>{pwMsg}</p>}
-        <button type="submit" className="btn btn-primary" disabled={pwSaving}>
-          {pwSaving ? 'Updating…' : 'Update password'}
-        </button>
-      </form>
-
-      <h2 style={{ fontSize: 16, marginBottom: 14 }}>LINE notifications</h2>
-      {lineLoading ? (
-        <p style={{ color: 'var(--color-text-muted)', fontSize: 13 }}>Loading…</p>
-      ) : lineStatus?.linked ? (
-        <div>
-          <p style={{ fontSize: 13, color: 'var(--status-done)', marginBottom: 12 }}>
-            ✓ Your LINE account is linked. You'll get task notifications there.
-          </p>
-          <button className="btn btn-danger" onClick={handleUnlinkLine}>
-            Unlink LINE
-          </button>
-        </div>
-      ) : (
-        <div>
-          <p style={{ fontSize: 13, color: 'var(--color-text-muted)', marginBottom: 12 }}>
-            Add our LINE Official Account as a friend, then send this code as a message to link your
-            account:
-          </p>
-          <div
-            style={{
-              fontFamily: 'monospace',
-              fontSize: 20,
-              fontWeight: 700,
-              letterSpacing: 2,
-              background: 'var(--color-surface-raised)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 8,
-              padding: '12px 16px',
-              display: 'inline-block',
-              marginBottom: 12,
-            }}
-          >
-            {lineStatus?.code}
+    <div className={styles.screen}>
+      <div className={styles.card}>
+        <div className={styles.identity}>
+          <span className={styles.avatar}>{(user?.name || '?').charAt(0).toUpperCase()}</span>
+          <div>
+            <h1 className={styles.identityName}>{user?.name}</h1>
+            <p className={styles.identityMeta}>
+              {user?.email} · {ROLE_LABELS[user?.role] || user?.role}
+            </p>
           </div>
-          <p style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
-            Once linked, you'll get LINE messages when you're assigned a task, a task's status
-            changes, someone comments, or a due date is approaching.
-          </p>
         </div>
-      )}
+
+        <div className={styles.section}>
+          <h2 className={styles.sectionTitle}>Name</h2>
+          <form onSubmit={handleNameSubmit}>
+            <div className={styles.field}>
+              <label htmlFor="profileName">Display name</label>
+              <input id="profileName" value={name} onChange={(e) => setName(e.target.value)} />
+            </div>
+            {nameError && <p className={styles.errorText}>{nameError}</p>}
+            {nameMsg && <p className={styles.successText}>{nameMsg}</p>}
+            <button type="submit" className="btn btn-primary" disabled={nameSaving}>
+              {nameSaving ? 'Saving…' : 'Save name'}
+            </button>
+          </form>
+        </div>
+
+        <div className={styles.section}>
+          <h2 className={styles.sectionTitle}>Password</h2>
+          <form onSubmit={handlePasswordSubmit}>
+            <div className={styles.field}>
+              <label htmlFor="currentPw">Current password</label>
+              <input
+                id="currentPw"
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+              />
+            </div>
+            <div className={styles.field}>
+              <label htmlFor="newPw">New password</label>
+              <input
+                id="newPw"
+                type="password"
+                minLength={6}
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+              />
+            </div>
+            {pwError && <p className={styles.errorText}>{pwError}</p>}
+            {pwMsg && <p className={styles.successText}>{pwMsg}</p>}
+            <button type="submit" className="btn btn-primary" disabled={pwSaving}>
+              {pwSaving ? 'Updating…' : 'Update password'}
+            </button>
+          </form>
+        </div>
+
+        <div className={styles.section}>
+          <h2 className={styles.sectionTitle}>LINE notifications</h2>
+          {lineLoading ? (
+            <p className={styles.lineHint}>Loading…</p>
+          ) : lineStatus?.linked ? (
+            <div>
+              <p className={styles.lineLinked}>✓ Your LINE account is linked. You'll get task notifications there.</p>
+              <button className="btn btn-danger" onClick={handleUnlinkLine}>
+                Unlink LINE
+              </button>
+            </div>
+          ) : (
+            <div>
+              <p className={styles.lineHint}>
+                Add our LINE Official Account as a friend, then send this code as a message to link your
+                account:
+              </p>
+              <div className={styles.linkCode}>{lineStatus?.code}</div>
+              <p className={styles.lineNote}>
+                Once linked, you'll get LINE messages when you're assigned a task, a task's status
+                changes, someone comments, or a due date is approaching.
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

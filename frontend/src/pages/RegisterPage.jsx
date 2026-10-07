@@ -29,6 +29,24 @@ export default function RegisterPage() {
 
   return (
     <div className={styles.authScreen}>
+      <div className={styles.brandPanel}>
+        <span className={styles.brandMark}>Task Tracker</span>
+        <div className={styles.brandBody}>
+          <div className={styles.brandBars}>
+            <div className={styles.brandBar} style={{ height: '100%', background: 'var(--status-done)' }} />
+            <div className={styles.brandBar} style={{ height: '55%', background: 'var(--status-review)' }} />
+            <div className={styles.brandBar} style={{ height: '70%', background: 'var(--status-in-progress)' }} />
+            <div className={styles.brandBar} style={{ height: '45%', background: 'var(--status-todo)' }} />
+          </div>
+          <h2 className={styles.brandHeadline}>Set up your account in a minute.</h2>
+          <p className={styles.brandSub}>
+            Join your team's project, pick up tasks, and get notified the moment something needs you.
+          </p>
+        </div>
+        <span className={styles.brandFoot}>To Do · In Progress · Review · Done</span>
+      </div>
+
+      <div className={styles.formPanel}>
       <div className={styles.authCard}>
         <h1>Create your account</h1>
         <p className="sub">Set up access to the team's board.</p>
@@ -80,6 +98,7 @@ export default function RegisterPage() {
         <p className={styles.switchLine}>
           Already have an account? <Link to="/login">Sign in</Link>
         </p>
+      </div>
       </div>
     </div>
   );

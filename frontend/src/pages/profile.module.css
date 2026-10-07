@@ -1,0 +1,119 @@
+.screen {
+  padding: 28px 32px;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.card {
+  max-width: 420px;
+}
+
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 28px;
+}
+
+.avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.identityName {
+  font-size: 20px;
+  margin: 0 0 2px;
+}
+
+.identityMeta {
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+.section {
+  margin-bottom: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--color-border);
+}
+
+.section:first-of-type {
+  padding-top: 0;
+  border-top: none;
+}
+
+.sectionTitle {
+  font-size: 16px;
+  margin: 0 0 14px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.field label {
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.field input {
+  width: 100%;
+}
+
+.errorText {
+  color: var(--priority-high);
+  font-size: 13px;
+  margin: -6px 0 12px;
+}
+
+.successText {
+  color: var(--status-done);
+  font-size: 13px;
+  margin: -6px 0 12px;
+}
+
+.lineLinked {
+  font-size: 13px;
+  color: var(--status-done);
+  margin: 0 0 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lineHint {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  margin: 0 0 14px;
+}
+
+.linkCode {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: 3px;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 12px 18px;
+  display: inline-block;
+  margin-bottom: 14px;
+}
+
+.lineNote {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  line-height: 1.6;
+}
