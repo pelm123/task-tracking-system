@@ -197,6 +197,13 @@ async function createTask(req, res) {
   }
 }
 
+// true if two due_date values (either may be null/undefined/a string) represent the same instant
+function sameDueDate(a, b) {
+  if (!a && !b) return true;
+  if (!a || !b) return false;
+  return new Date(a).getTime() === new Date(b).getTime();
+}
+
 // PATCH /tasks/:id  (general edit: title, description, priority, due_date, assignee_ids)
 async function updateTask(req, res) {
   const { title, description, priority, due_date, assignee_ids } = req.body;
@@ -206,9 +213,27 @@ async function updateTask(req, res) {
   }
 
   try {
-    const before = await pool.query('SELECT id FROM tasks WHERE id = $1', [req.params.id]);
+    const before = await pool.query('SELECT id, due_date FROM tasks WHERE id = $1', [req.params.id]);
     if (before.rows.length === 0) {
       return res.status(404).json({ message: 'Task not found' });
+    }
+
+    // Members can reschedule (change the due date of) a task only when
+    // they're one of its assignees — they can't move someone else's dates
+    // around. PM/admin aren't restricted. Only enforced when the due date
+    // is actually changing, so saving the rest of the form doesn't 403.
+    if (
+      due_date !== undefined &&
+      req.user.role === 'member' &&
+      !sameDueDate(due_date, before.rows[0].due_date)
+    ) {
+      const assignedCheck = await pool.query(
+        'SELECT 1 FROM task_assignees WHERE task_id = $1 AND user_id = $2',
+        [req.params.id, req.user.id]
+      );
+      if (assignedCheck.rows.length === 0) {
+        return res.status(403).json({ message: 'You can only reschedule tasks you are assigned to.' });
+      }
     }
 
     await pool.query(
@@ -265,6 +290,18 @@ async function updateTaskStatus(req, res) {
       return res.status(404).json({ message: 'Task not found' });
     }
     const previousStatus = before.rows[0].status;
+
+    // A member can only move a task they're actually assigned to — not
+    // someone else's. PM/admin can move anything.
+    if (req.user.role === 'member') {
+      const assignedCheck = await pool.query(
+        'SELECT 1 FROM task_assignees WHERE task_id = $1 AND user_id = $2',
+        [req.params.id, req.user.id]
+      );
+      if (assignedCheck.rows.length === 0) {
+        return res.status(403).json({ message: 'You can only move tasks you are assigned to.' });
+      }
+    }
 
     await pool.query(`UPDATE tasks SET status = $1::task_status WHERE id = $2`, [status, req.params.id]);
 
@@ -421,6 +458,23 @@ async function bulkUpdateStatus(req, res) {
   }
 
   try {
+    // A member can only bulk-move tasks they're assigned to — reject the
+    // whole batch if any selected task belongs to someone else, rather than
+    // silently moving some and skipping others.
+    if (req.user.role === 'member') {
+      const unowned = await pool.query(
+        `SELECT t.id FROM tasks t
+         WHERE t.id = ANY($1::uuid[])
+           AND NOT EXISTS (
+             SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = $2
+           )`,
+        [taskIds, req.user.id]
+      );
+      if (unowned.rows.length > 0) {
+        return res.status(403).json({ message: 'You can only move tasks you are assigned to.' });
+      }
+    }
+
     const result = await pool.query(
       `UPDATE tasks SET status = $1::task_status WHERE id = ANY($2::uuid[]) RETURNING id`,
       [status, taskIds]

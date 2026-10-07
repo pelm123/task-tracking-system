@@ -23,25 +23,39 @@ export default function TaskCard({
   canApprove,
   onApprove,
   onDeny,
+  currentUser,
 }) {
   const showApprovalActions = canApprove && task.status === 'review';
 
+  // A member can only move a task they're assigned to — not someone
+  // else's (PM/admin can move anything). Mirrors the backend check in
+  // updateTaskStatus/bulkUpdateStatus.
+  const isAssignee = (task.assignees || []).some((a) => a.id === currentUser?.id);
+  const canMove = canApprove || isAssignee;
+
   return (
-    <Draggable draggableId={task.id} index={index} isDragDisabled={selectMode}>
+    <Draggable draggableId={task.id} index={index} isDragDisabled={selectMode || !canMove}>
       {(provided, snapshot) => (
         <div
           ref={provided.innerRef}
           {...provided.draggableProps}
           {...provided.dragHandleProps}
           className={`${styles.card} ${snapshot.isDragging ? styles.dragging : ''}`}
-          style={{ '--card-accent': PRIORITY_COLORS[task.priority], ...provided.draggableProps.style }}
-          onClick={() => (selectMode ? onToggleSelect(task.id) : onClick(task))}
+          style={{
+            '--card-accent': PRIORITY_COLORS[task.priority],
+            ...provided.draggableProps.style,
+            cursor: canMove ? undefined : 'default',
+            opacity: !selectMode && !canMove ? 0.75 : 1,
+          }}
+          title={!selectMode && !canMove ? "You're not assigned to this task, so you can't move it" : undefined}
+          onClick={() => (selectMode ? (canMove && onToggleSelect(task.id)) : onClick(task))}
         >
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
             {selectMode && (
               <input
                 type="checkbox"
                 checked={isSelected}
+                disabled={!canMove}
                 onChange={() => onToggleSelect(task.id)}
                 onClick={(e) => e.stopPropagation()}
                 style={{ marginTop: 3 }}

@@ -14,14 +14,27 @@ function timeAgo(dateStr) {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
+// task.due_date arrives as a full timestamp; <input type="date"> needs YYYY-MM-DD
+function toDateInputValue(dueDate) {
+  if (!dueDate) return '';
+  return new Date(dueDate).toISOString().slice(0, 10);
+}
+
 export default function TaskDetailModal({ task, users, onClose, onUpdate, onDelete, canApprove, onApprove, onDeny }) {
   const { user: currentUser } = useAuth();
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description || '');
   const [priority, setPriority] = useState(task.priority);
+  const [dueDate, setDueDate] = useState(toDateInputValue(task.due_date));
   const [assigneeIds, setAssigneeIds] = useState((task.assignees || []).map((a) => a.id));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  // Members can only reschedule tasks they're assigned to — not anyone
+  // else's. PM/admin can reschedule any task. Mirrors the backend check in
+  // updateTask.
+  const isAssignee = (task.assignees || []).some((a) => a.id === currentUser.id);
+  const canReschedule = currentUser.role !== 'member' || isAssignee;
 
   function toggleAssignee(userId) {
     setAssigneeIds((prev) =>
@@ -59,6 +72,10 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
         title: title.trim(),
         description: description.trim(),
         priority,
+        // only send a due_date change when the person was actually allowed
+        // to make one — a disabled input never changes, but this keeps the
+        // request honest even if that ever stops being true
+        due_date: canReschedule ? dueDate || null : toDateInputValue(task.due_date) || null,
         assignee_ids: assigneeIds,
       });
     } catch (err) {
@@ -173,6 +190,23 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
               <option value="medium">Medium</option>
               <option value="high">High</option>
             </select>
+          </div>
+
+          <div className={styles.field}>
+            <label htmlFor="dDueDate">Due date</label>
+            <input
+              id="dDueDate"
+              type="date"
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+              disabled={!canReschedule}
+              title={canReschedule ? undefined : 'Only assigned members can reschedule this task'}
+            />
+            {!canReschedule && (
+              <p className={styles.emptyText} style={{ marginTop: 4 }}>
+                You're not assigned to this task, so you can't reschedule it.
+              </p>
+            )}
           </div>
 
           <div className={styles.field}>

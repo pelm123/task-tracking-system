@@ -110,6 +110,18 @@ export default function BoardPage() {
       return;
     }
 
+    // Members can only move their own tasks — this is also enforced by
+    // disabling the drag itself (see TaskCard), but checked again here in
+    // case the task's assignee list changed after the board last loaded.
+    if (!canApprove) {
+      const task = tasks.find((t) => t.id === draggableId);
+      const isAssignee = (task?.assignees || []).some((a) => a.id === user.id);
+      if (!isAssignee) {
+        setError('You can only move tasks you are assigned to.');
+        return;
+      }
+    }
+
     setTasks((prev) =>
       prev.map((t) => (t.id === draggableId ? { ...t, status: newStatus } : t))
     );
@@ -407,6 +419,7 @@ export default function BoardPage() {
                 canApprove={canApprove}
                 onApprove={handleApprove}
                 onDeny={handleDeny}
+                currentUser={user}
               />
             ))}
           </div>
