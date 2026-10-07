@@ -196,6 +196,40 @@
   color: var(--color-text-muted);
 }
 
+.approvalActions {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.approveBtn,
+.denyBtn {
+  flex: 1;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: opacity 0.12s ease;
+}
+
+.approveBtn {
+  border: 1px solid var(--status-done);
+  background: color-mix(in srgb, var(--status-done) 15%, transparent);
+  color: var(--status-done);
+}
+
+.denyBtn {
+  border: 1px solid var(--priority-high);
+  background: color-mix(in srgb, var(--priority-high) 12%, transparent);
+  color: var(--priority-high);
+}
+
+.approveBtn:hover,
+.denyBtn:hover {
+  opacity: 0.8;
+}
+
 .quickAdd {
   padding: 8px;
   border-top: 1px solid var(--color-border);

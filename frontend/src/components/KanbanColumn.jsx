@@ -10,8 +10,24 @@ const STATUS_COLORS = {
   done: 'var(--status-done)',
 };
 
-export default function KanbanColumn({ status, label, tasks, onTaskClick, onQuickAdd, selectMode, selectedIds, onToggleSelect }) {
+export default function KanbanColumn({
+  status,
+  label,
+  tasks,
+  onTaskClick,
+  onQuickAdd,
+  selectMode,
+  selectedIds,
+  onToggleSelect,
+  canApprove,
+  onApprove,
+  onDeny,
+}) {
   const [draft, setDraft] = useState('');
+
+  // Done is reached only through PM/admin approval of a Review task, so a
+  // member can't drag into it or quick-add straight into it.
+  const doneLockedForUser = status === 'done' && !canApprove;
 
   function handleAdd(e) {
     e.preventDefault();
@@ -31,7 +47,7 @@ export default function KanbanColumn({ status, label, tasks, onTaskClick, onQuic
         <span className={styles.count}>{tasks.length}</span>
       </div>
 
-      <Droppable droppableId={status}>
+      <Droppable droppableId={status} isDropDisabled={doneLockedForUser}>
         {(provided, snapshot) => (
           <div
             ref={provided.innerRef}
@@ -39,7 +55,11 @@ export default function KanbanColumn({ status, label, tasks, onTaskClick, onQuic
             className={`${styles.cardList} ${snapshot.isDraggingOver ? styles.draggingOver : ''}`}
           >
             {tasks.length === 0 && !snapshot.isDraggingOver && (
-              <div className={styles.emptyColumn}>No tasks here yet</div>
+              <div className={styles.emptyColumn}>
+                {status === 'review' && !canApprove
+                  ? 'No tasks awaiting approval'
+                  : 'No tasks here yet'}
+              </div>
             )}
             {tasks.map((task, index) => (
               <TaskCard
@@ -50,6 +70,9 @@ export default function KanbanColumn({ status, label, tasks, onTaskClick, onQuic
                 selectMode={selectMode}
                 isSelected={selectedIds?.includes(task.id)}
                 onToggleSelect={onToggleSelect}
+                canApprove={canApprove}
+                onApprove={onApprove}
+                onDeny={onDeny}
               />
             ))}
             {provided.placeholder}
@@ -57,14 +80,16 @@ export default function KanbanColumn({ status, label, tasks, onTaskClick, onQuic
         )}
       </Droppable>
 
-      <form className={styles.quickAdd} onSubmit={handleAdd}>
-        <input
-          className={styles.quickAddInput}
-          placeholder="+ Add a task"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-        />
-      </form>
+      {!doneLockedForUser && (
+        <form className={styles.quickAdd} onSubmit={handleAdd}>
+          <input
+            className={styles.quickAddInput}
+            placeholder="+ Add a task"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+          />
+        </form>
+      )}
     </div>
   );
 }

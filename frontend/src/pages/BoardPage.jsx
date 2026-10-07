@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { DragDropContext } from '@hello-pangea/dnd';
 import { useProject } from '../context/ProjectContext';
+import { useAuth } from '../context/AuthContext';
 import * as tasksApi from '../api/tasks';
 import * as usersApi from '../api/users';
 import socket from '../api/socket';
@@ -26,6 +27,8 @@ const COLUMNS = [
 
 export default function BoardPage() {
   const { currentProjectId, currentProject } = useProject();
+  const { user } = useAuth();
+  const canApprove = user?.role === 'admin' || user?.role === 'pm';
   const [tasks, setTasks] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -100,6 +103,13 @@ export default function BoardPage() {
 
     const newStatus = destination.droppableId;
 
+    // Members can't drag a card straight into Done — a PM/admin has to
+    // approve it from Review first (see handleApprove below).
+    if (newStatus === 'done' && !canApprove) {
+      setError('Only a PM or admin can move a task to Done. Move it to Review for approval instead.');
+      return;
+    }
+
     setTasks((prev) =>
       prev.map((t) => (t.id === draggableId ? { ...t, status: newStatus } : t))
     );
@@ -107,8 +117,37 @@ export default function BoardPage() {
     try {
       await tasksApi.updateTaskStatus(draggableId, newStatus);
     } catch (err) {
-      setError('Could not save that move — reverting.');
+      setError(err.response?.data?.message || 'Could not save that move — reverting.');
       loadTasks();
+    }
+  }
+
+  async function handleApprove(taskId) {
+    try {
+      const updated = await tasksApi.approveTask(taskId);
+      setTasks((prev) => prev.map((t) => (t.id === taskId ? updated : t)));
+      setSelectedTask((prev) => (prev && prev.id === taskId ? updated : prev));
+    } catch (err) {
+      setError(err.response?.data?.message || 'Could not approve that task.');
+    }
+  }
+
+  async function handleDeny(taskId) {
+    // a comment explaining the denial is required — keep asking until the
+    // PM provides one or explicitly cancels (the backend enforces this too,
+    // this just avoids a round-trip for the common case)
+    let reason = window.prompt('Comment explaining why this task is denied (required):', '');
+    if (reason === null) return; // user cancelled the prompt
+    while (!reason.trim()) {
+      reason = window.prompt('A comment is required to deny a task. Please explain what needs to change:', '');
+      if (reason === null) return;
+    }
+    try {
+      const updated = await tasksApi.denyTask(taskId, reason);
+      setTasks((prev) => prev.map((t) => (t.id === taskId ? updated : t)));
+      setSelectedTask((prev) => (prev && prev.id === taskId ? updated : prev));
+    } catch (err) {
+      setError(err.response?.data?.message || 'Could not deny that task.');
     }
   }
 
@@ -291,7 +330,7 @@ export default function BoardPage() {
             <option value="todo">To Do</option>
             <option value="in_progress">In Progress</option>
             <option value="review">Review</option>
-            <option value="done">Done</option>
+            {canApprove && <option value="done">Done</option>}
           </select>
           <select
             onChange={(e) => handleBulkAssign(e.target.value === '__clear__' ? null : e.target.value)}
@@ -365,6 +404,9 @@ export default function BoardPage() {
                 selectMode={selectMode}
                 selectedIds={selectedIds}
                 onToggleSelect={toggleSelect}
+                canApprove={canApprove}
+                onApprove={handleApprove}
+                onDeny={handleDeny}
               />
             ))}
           </div>
@@ -386,6 +428,9 @@ export default function BoardPage() {
           onClose={() => setSelectedTask(null)}
           onUpdate={handleUpdateTask}
           onDelete={handleDeleteTask}
+          canApprove={canApprove}
+          onApprove={handleApprove}
+          onDeny={handleDeny}
         />
       )}
     </div>
