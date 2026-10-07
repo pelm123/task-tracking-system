@@ -29,12 +29,39 @@
   border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 13px;
+  transition: border-color 0.12s ease, color 0.12s ease, background 0.12s ease;
 }
 
-.tabBtnActive {
-  background: var(--color-surface-raised);
+.tabBtn:hover {
   color: var(--color-text);
   border-color: var(--color-text-muted);
+}
+
+.tabBtnActive,
+.tabBtnActive:hover {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.userCell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .tableWrap {
@@ -69,6 +96,21 @@
 
 .table tr:last-child td {
   border-bottom: none;
+}
+
+.table tbody tr {
+  transition: background 0.1s ease;
+}
+
+.table tbody tr:hover {
+  background: var(--color-surface-raised);
+}
+
+.emptyRow {
+  text-align: center;
+  padding: 28px !important;
+  color: var(--color-text-muted);
+  font-style: italic;
 }
 
 .roleSelect {

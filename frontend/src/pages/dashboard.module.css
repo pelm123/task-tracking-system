@@ -25,8 +25,15 @@
 .statCard {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
+  border-top: 3px solid var(--stat-accent, var(--color-border));
   border-radius: var(--radius-md);
   padding: 16px 18px;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.statCard:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
 }
 
 .statValue {
@@ -57,6 +64,41 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   padding: 18px 20px;
+  transition: border-color 0.12s ease;
+}
+
+.chartCard:hover {
+  border-color: var(--color-text-muted);
+}
+
+.activityItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.activityItem:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.activityDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-right: 8px;
+  display: inline-block;
+}
+
+.activityTime {
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  font-size: 12px;
 }
 
 .chartTitle {
