@@ -22,6 +22,7 @@ export default function KanbanColumn({
   canApprove,
   onApprove,
   onDeny,
+  currentUser,
 }) {
   const [draft, setDraft] = useState('');
 
@@ -73,6 +74,7 @@ export default function KanbanColumn({
                 canApprove={canApprove}
                 onApprove={onApprove}
                 onDeny={onDeny}
+                currentUser={currentUser}
               />
             ))}
             {provided.placeholder}
