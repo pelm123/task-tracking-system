@@ -26,6 +26,15 @@ export default defineConfig({
         target: 'http://localhost:4000',
         changeOrigin: true,
       },
+      // Socket.IO's live-updates connection (WebSocket upgrade) — proxying
+      // it through Vite means the browser always connects to "itself"
+      // (same origin, whether that's localhost, the LAN IP, or an ngrok
+      // tunnel) and never needs to know the backend's real address
+      '/socket.io': {
+        target: 'http://localhost:4000',
+        ws: true,
+        changeOrigin: true,
+      },
     },
   },
 });

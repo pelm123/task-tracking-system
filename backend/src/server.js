@@ -1,8 +1,10 @@
 require('dotenv').config();
 
+const http = require('http');
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
+const { Server } = require('socket.io');
 
 const healthRoutes = require('./routes/health.routes');
 const authRoutes = require('./routes/auth.routes');
@@ -49,7 +51,31 @@ app.get('/', (req, res) => {
   res.json({ message: 'Task Tracking System API' });
 });
 
-app.listen(PORT, () => {
+// ── Real-time board sync ───────────────────────────────────────
+// Wrap Express in a plain http.Server so Socket.IO can share the same port
+// (4000) instead of needing one of its own. Controllers reach `io` via
+// req.app.get('io') so they can broadcast after a DB write succeeds.
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: { origin: true }, // reflect the request's origin — works whether the
+  // app is opened over LAN, through the Vite dev proxy, or through an ngrok
+  // tunnel, without having to hardcode a frontend URL here
+});
+app.set('io', io);
+
+io.on('connection', (socket) => {
+  // each browser tab joins a room named after the project it's currently
+  // viewing, so a task change only broadcasts to people looking at that
+  // same project — not every connected client across every project
+  socket.on('join-project', (projectId) => {
+    if (projectId) socket.join(`project:${projectId}`);
+  });
+  socket.on('leave-project', (projectId) => {
+    if (projectId) socket.leave(`project:${projectId}`);
+  });
+});
+
+server.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
   startDueDateScheduler();
 });
