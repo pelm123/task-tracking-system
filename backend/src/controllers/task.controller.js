@@ -251,6 +251,14 @@ async function updateTaskStatus(req, res) {
     return res.status(400).json({ message: `status must be one of ${VALID_STATUSES.join(', ')}` });
   }
 
+  // Members can move a task between To Do / In Progress / Review freely,
+  // but Done is reserved for PM/admin approval — see approveTask/denyTask.
+  if (status === 'done' && !['admin', 'pm'].includes(req.user.role)) {
+    return res.status(403).json({
+      message: 'Only a PM or admin can move a task to Done. Move it to Review and ask your PM to approve it.',
+    });
+  }
+
   try {
     const before = await pool.query('SELECT status FROM tasks WHERE id = $1', [req.params.id]);
     if (before.rows.length === 0) {
@@ -280,6 +288,97 @@ async function updateTaskStatus(req, res) {
     res.json(task);
   } catch (err) {
     console.error('Update task status error:', err.message);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+// POST /tasks/:id/approve — PM/admin only. Approves a task that's in Review,
+// moving it to Done. This is the only path into Done; members can't set it
+// directly (see updateTaskStatus above).
+async function approveTask(req, res) {
+  try {
+    const before = await pool.query('SELECT status FROM tasks WHERE id = $1', [req.params.id]);
+    if (before.rows.length === 0) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+    if (before.rows[0].status !== 'review') {
+      return res.status(400).json({ message: 'Only a task currently in Review can be approved.' });
+    }
+
+    await pool.query(`UPDATE tasks SET status = 'done'::task_status WHERE id = $1`, [req.params.id]);
+    const task = await getEnrichedTask(req.params.id);
+
+    const actorName = await getUserName(req.user.id);
+    const message = `${actorName} approved "${task.title}" — moved to Done`;
+    for (const assignee of task.assignees) {
+      if (assignee.id === req.user.id) continue; // don't notify the actor
+      await pool.query(
+        `INSERT INTO notifications (user_id, task_id, type, message)
+         VALUES ($1, $2, 'approved', $3)`,
+        [assignee.id, task.id, message]
+      );
+      notifyLineIfLinked(assignee.id, `✅ ${message}`);
+    }
+
+    broadcastTask(req, task.project_id, 'task:upserted', task);
+    res.json(task);
+  } catch (err) {
+    console.error('Approve task error:', err.message);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+// POST /tasks/:id/deny — PM/admin only. Denies a task that's in Review,
+// sending it back to To Do. A comment explaining why is REQUIRED — it's
+// saved as a real comment on the task (so it shows up in the comment
+// thread, same as any other comment) and also sent as a notification to
+// every assignee.
+async function denyTask(req, res) {
+  const { reason } = req.body;
+
+  if (!reason || !reason.trim()) {
+    return res.status(400).json({ message: 'A comment explaining why the task was denied is required.' });
+  }
+  const trimmedReason = reason.trim();
+
+  try {
+    const before = await pool.query('SELECT status FROM tasks WHERE id = $1', [req.params.id]);
+    if (before.rows.length === 0) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+    if (before.rows[0].status !== 'review') {
+      return res.status(400).json({ message: 'Only a task currently in Review can be denied.' });
+    }
+
+    await pool.query(`UPDATE tasks SET status = 'todo'::task_status WHERE id = $1`, [req.params.id]);
+
+    // record the PM's reason as a real comment, so it's visible in the
+    // task's comment thread, not just buried in a notification string
+    const commentResult = await pool.query(
+      `INSERT INTO comments (task_id, user_id, content)
+       VALUES ($1, $2, $3)
+       RETURNING id, content, created_at, user_id`,
+      [req.params.id, req.user.id, `Approval denied — returned to To Do: ${trimmedReason}`]
+    );
+
+    const task = await getEnrichedTask(req.params.id);
+
+    const actorName = await getUserName(req.user.id);
+    const message = `${actorName} returned "${task.title}" to To Do (approval denied) — "${trimmedReason}"`;
+    for (const assignee of task.assignees) {
+      if (assignee.id === req.user.id) continue; // don't notify the actor
+      await pool.query(
+        `INSERT INTO notifications (user_id, task_id, type, message)
+         VALUES ($1, $2, 'approval_denied', $3)`,
+        [assignee.id, task.id, message]
+      );
+      notifyLineIfLinked(assignee.id, `↩️ ${message}`);
+    }
+
+    broadcastTask(req, task.project_id, 'task:upserted', task);
+    res.json({ ...task, denialComment: { ...commentResult.rows[0], author_name: actorName } });
+  } catch (err) {
+    console.error('Deny task error:', err.message);
     res.status(500).json({ message: 'Internal server error' });
   }
 }
@@ -316,6 +415,9 @@ async function bulkUpdateStatus(req, res) {
   }
   if (!status || !VALID_STATUSES.includes(status)) {
     return res.status(400).json({ message: `status must be one of ${VALID_STATUSES.join(', ')}` });
+  }
+  if (status === 'done' && !['admin', 'pm'].includes(req.user.role)) {
+    return res.status(403).json({ message: 'Only a PM or admin can move tasks to Done.' });
   }
 
   try {
@@ -402,6 +504,8 @@ module.exports = {
   createTask,
   updateTask,
   updateTaskStatus,
+  approveTask,
+  denyTask,
   deleteTask,
   bulkUpdateStatus,
   bulkAssign,

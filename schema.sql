@@ -8,7 +8,7 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto"; -- for gen_random_uuid()
 CREATE TYPE user_role AS ENUM ('admin', 'pm', 'member');
 CREATE TYPE task_status AS ENUM ('todo', 'in_progress', 'review', 'done');
 CREATE TYPE task_priority AS ENUM ('low', 'medium', 'high');
-CREATE TYPE notification_type AS ENUM ('due_soon', 'assigned', 'comment', 'status_change');
+CREATE TYPE notification_type AS ENUM ('due_soon', 'assigned', 'comment', 'status_change', 'approved', 'approval_denied');
 
 -- ── Users ───────────────────────────────────────────────────
 CREATE TABLE users (
@@ -20,23 +20,43 @@ CREATE TABLE users (
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- ── Projects ────────────────────────────────────────────────
+CREATE TABLE projects (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name        VARCHAR(150) NOT NULL,
+    description TEXT,
+    created_by  UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 -- ── Tasks ───────────────────────────────────────────────────
 CREATE TABLE tasks (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    project_id   UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     title        VARCHAR(200) NOT NULL,
     description  TEXT,
     status       task_status NOT NULL DEFAULT 'todo',
     priority     task_priority NOT NULL DEFAULT 'medium',
     due_date     TIMESTAMPTZ,
-    assignee_id  UUID REFERENCES users(id) ON DELETE SET NULL,
     created_by   UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_tasks_assignee ON tasks(assignee_id);
+CREATE INDEX idx_tasks_project   ON tasks(project_id);
 CREATE INDEX idx_tasks_status   ON tasks(status);
 CREATE INDEX idx_tasks_due_date ON tasks(due_date);
+
+-- ── Task assignees (many-to-many) ──────────────────────────────
+CREATE TABLE task_assignees (
+    task_id     UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    assigned_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    PRIMARY KEY (task_id, user_id)
+);
+
+CREATE INDEX idx_task_assignees_user ON task_assignees(user_id);
+CREATE INDEX idx_task_assignees_task ON task_assignees(task_id);
 
 -- keep updated_at fresh on every UPDATE
 CREATE OR REPLACE FUNCTION set_updated_at()
