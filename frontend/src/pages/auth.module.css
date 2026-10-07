@@ -1,5 +1,70 @@
 .authScreen {
   min-height: 100%;
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(360px, 1fr);
+}
+
+/* ── Brand panel ─────────────────────────────────────────────── */
+.brandPanel {
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-border);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 40px;
+  position: relative;
+  overflow: hidden;
+}
+
+.brandMark {
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  z-index: 1;
+}
+
+.brandBody {
+  z-index: 1;
+  max-width: 380px;
+}
+
+.brandHeadline {
+  font-family: var(--font-display);
+  font-size: 40px;
+  line-height: 1.15;
+  margin: 0 0 14px;
+}
+
+.brandSub {
+  color: var(--color-text-muted);
+  font-size: 15px;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* four bars echoing the board's own status colors — not decoration,
+   a preview of the product's vocabulary before you've even logged in */
+.brandBars {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  height: 120px;
+  margin-bottom: 28px;
+}
+
+.brandBar {
+  width: 14px;
+  border-radius: 3px 3px 0 0;
+}
+
+.brandFoot {
+  z-index: 1;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+/* ── Form panel ──────────────────────────────────────────────── */
+.formPanel {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -12,7 +77,7 @@
 }
 
 .authCard h1 {
-  font-size: 28px;
+  font-size: 26px;
   margin-bottom: 4px;
 }
 
@@ -50,10 +115,13 @@
   font-size: 14px;
   cursor: pointer;
   margin-top: 4px;
+  transition: filter 0.12s ease, box-shadow 0.12s ease;
+  box-shadow: var(--shadow-sm);
 }
 
-.submitBtn:hover {
+.submitBtn:hover:not(:disabled) {
   filter: brightness(1.08);
+  box-shadow: var(--shadow-md);
 }
 
 .submitBtn:disabled {
@@ -72,8 +140,37 @@
   text-decoration: none;
 }
 
+.switchLine a:hover {
+  text-decoration: underline;
+}
+
 .errorText {
   color: var(--priority-high);
   font-size: 13px;
   margin: -8px 0 16px;
+}
+
+@media (max-width: 760px) {
+  .authScreen {
+    grid-template-columns: 1fr;
+  }
+
+  .brandPanel {
+    border-right: none;
+    border-bottom: 1px solid var(--color-border);
+    padding: 28px 24px;
+  }
+
+  .brandHeadline {
+    font-size: 28px;
+  }
+
+  .brandBars {
+    height: 70px;
+    margin-bottom: 16px;
+  }
+
+  .brandFoot {
+    display: none;
+  }
 }
