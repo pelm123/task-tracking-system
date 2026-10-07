@@ -13,7 +13,19 @@ function formatDueDate(dateStr) {
   return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
-export default function TaskCard({ task, index, onClick, selectMode, isSelected, onToggleSelect }) {
+export default function TaskCard({
+  task,
+  index,
+  onClick,
+  selectMode,
+  isSelected,
+  onToggleSelect,
+  canApprove,
+  onApprove,
+  onDeny,
+}) {
+  const showApprovalActions = canApprove && task.status === 'review';
+
   return (
     <Draggable draggableId={task.id} index={index} isDragDisabled={selectMode}>
       {(provided, snapshot) => (
@@ -81,6 +93,22 @@ export default function TaskCard({ task, index, onClick, selectMode, isSelected,
                   ? task.assignees[0].name
                   : `${task.assignees.length} assignees`}
               </span>
+            </div>
+          )}
+          {showApprovalActions && (
+            <div className={styles.approvalActions} onClick={(e) => e.stopPropagation()}>
+              <button
+                className={styles.approveBtn}
+                onClick={() => onApprove(task.id)}
+              >
+                ✓ Approve
+              </button>
+              <button
+                className={styles.denyBtn}
+                onClick={() => onDeny(task.id)}
+              >
+                ✕ Deny
+              </button>
             </div>
           )}
         </div>

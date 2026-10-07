@@ -14,7 +14,7 @@ function timeAgo(dateStr) {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
-export default function TaskDetailModal({ task, users, onClose, onUpdate, onDelete }) {
+export default function TaskDetailModal({ task, users, onClose, onUpdate, onDelete, canApprove, onApprove, onDeny }) {
   const { user: currentUser } = useAuth();
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description || '');
@@ -45,7 +45,11 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
       .then(setComments)
       .finally(() => setLoadingComments(false));
     attachmentsApi.listAttachments(task.id).then(setAttachments);
-  }, [task.id]);
+    // task.updated_at changes whenever the task is approved/denied/edited
+    // elsewhere (e.g. the real-time sync from another tab) — re-pull
+    // comments then too, so a PM's required denial comment shows up here
+    // without the person having to close and reopen the task.
+  }, [task.id, task.updated_at]);
 
   async function handleSave() {
     setSaving(true);
@@ -193,12 +197,36 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
           </div>
         </div>
 
+        {task.status === 'review' && (
+          <p className={styles.emptyText} style={{ margin: '0 0 12px' }}>
+            {canApprove
+              ? 'This task is awaiting your approval.'
+              : 'This task is in Review, waiting for a PM to approve it before it can move to Done.'}
+          </p>
+        )}
+
         {error && <p className={styles.errorText}>{error}</p>}
 
         <div className={styles.formActions}>
           <button className={styles.btnDanger} onClick={handleDelete}>
             Delete
           </button>
+          {task.status === 'review' && canApprove && (
+            <>
+              <button
+                className={styles.btnDanger}
+                onClick={() => onDeny(task.id)}
+              >
+                Deny — back to To Do
+              </button>
+              <button
+                className={styles.btnPrimary}
+                onClick={() => onApprove(task.id)}
+              >
+                Approve — move to Done
+              </button>
+            </>
+          )}
           <button className={styles.btnPrimary} onClick={handleSave} disabled={saving}>
             {saving ? 'Saving…' : 'Save changes'}
           </button>
