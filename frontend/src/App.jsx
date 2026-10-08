@@ -5,6 +5,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import AdminRoute from './components/AdminRoute';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
+import HomePage from './pages/HomePage';
 import BoardPage from './pages/BoardPage';
 import CalendarPage from './pages/CalendarPage';
 import DashboardPage from './pages/DashboardPage';
@@ -34,6 +35,14 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          <Route
+            path="/home"
+            element={
+              <AuthedLayout>
+                <HomePage />
+              </AuthedLayout>
+            }
+          />
           <Route
             path="/board"
             element={
@@ -74,7 +83,7 @@ export default function App() {
               </AuthedLayout>
             }
           />
-          <Route path="*" element={<Navigate to="/board" replace />} />
+          <Route path="*" element={<Navigate to="/home" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
