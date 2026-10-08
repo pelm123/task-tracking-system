@@ -61,7 +61,7 @@ async function getEnrichedTask(id) {
             t.reminder_hours_before,
             t.project_id, p.name AS project_name,
             t.created_by, c.name AS creator_name,
-            t.created_at, t.updated_at,
+            t.created_at, t.updated_at, t.completed_at,
             ${ASSIGNEES_SUBQUERY}
      FROM tasks t
      LEFT JOIN users c ON c.id = t.created_by
@@ -145,7 +145,7 @@ async function listTasks(req, res) {
               t.reminder_hours_before,
               t.project_id, p.name AS project_name,
               t.created_by, c.name AS creator_name,
-              t.created_at, t.updated_at,
+              t.created_at, t.updated_at, t.completed_at,
               ${ASSIGNEES_SUBQUERY}
        FROM tasks t
        LEFT JOIN users c ON c.id = t.created_by
@@ -424,7 +424,16 @@ async function updateTaskStatus(req, res) {
       }
     }
 
-    await pool.query(`UPDATE tasks SET status = $1::task_status WHERE id = $2`, [status, req.params.id]);
+    // Track completed_at alongside status: set it the moment a task lands
+    // on Done, clear it if it's ever moved back off Done (reopened) — this
+    // is what the dashboard's month/fiscal-year reports key off of.
+    await pool.query(
+      `UPDATE tasks
+       SET status = $1::task_status,
+           completed_at = CASE WHEN $1::task_status = 'done' THEN now() ELSE NULL END
+       WHERE id = $2`,
+      [status, req.params.id]
+    );
 
     const task = await getEnrichedTask(req.params.id);
 
@@ -463,7 +472,10 @@ async function approveTask(req, res) {
       return res.status(400).json({ message: 'Only a task currently in Review can be approved.' });
     }
 
-    await pool.query(`UPDATE tasks SET status = 'done'::task_status WHERE id = $1`, [req.params.id]);
+    await pool.query(
+      `UPDATE tasks SET status = 'done'::task_status, completed_at = now() WHERE id = $1`,
+      [req.params.id]
+    );
     const task = await getEnrichedTask(req.params.id);
 
     const actorName = await getUserName(req.user.id);
@@ -598,7 +610,10 @@ async function bulkUpdateStatus(req, res) {
     }
 
     const result = await pool.query(
-      `UPDATE tasks SET status = $1::task_status WHERE id = ANY($2::uuid[]) RETURNING id`,
+      `UPDATE tasks
+       SET status = $1::task_status,
+           completed_at = CASE WHEN $1::task_status = 'done' THEN now() ELSE NULL END
+       WHERE id = ANY($2::uuid[]) RETURNING id`,
       [status, taskIds]
     );
     const updated = await Promise.all(result.rows.map((r) => getEnrichedTask(r.id)));

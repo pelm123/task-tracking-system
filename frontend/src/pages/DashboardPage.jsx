@@ -26,6 +26,20 @@ const STATUS_COLORS = {
 };
 const PRIORITY_COLORS = { low: '#7c8985', medium: '#c9a63e', high: '#c9603e' };
 
+const ALL_PROJECTS = 'all';
+const PROJECT_FILTER_STORAGE_KEY = 'dashboardProjectFilter';
+
+// Same deterministic hash-to-color used on the Calendar page and the
+// project switcher, so a given project reads as the same color everywhere.
+function colorForProject(projectId) {
+  if (!projectId) return 'var(--color-text-muted)';
+  let hash = 0;
+  for (let i = 0; i < projectId.length; i++) {
+    hash = (hash * 31 + projectId.charCodeAt(i)) >>> 0;
+  }
+  return `hsl(${hash % 360}, 60%, 55%)`;
+}
+
 function timeAgo(dateStr) {
   const diffMs = Date.now() - new Date(dateStr).getTime();
   const mins = Math.floor(diffMs / 60000);
@@ -36,35 +50,171 @@ function timeAgo(dateStr) {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
-export default function DashboardPage() {
-  const { currentProjectId } = useProject();
+function pct(numerator, denominator) {
+  if (!denominator) return 0;
+  return Math.round((numerator / denominator) * 100);
+}
+
+// One period's report (This Month, or the fiscal year) — stat cards, a
+// status/priority breakdown, and a per-project / per-assignee rundown.
+// Shared between both periods on the "All projects" view.
+function PeriodSection({ title, subtitle, data }) {
+  const statusData = Object.entries(data.byStatus).map(([status, count]) => ({
+    status,
+    label: STATUS_LABELS[status],
+    count,
+  }));
+  const priorityData = Object.entries(data.byPriority).map(([priority, count]) => ({ priority, count }));
+  const maxProjectTotal = Math.max(1, ...data.byProject.map((p) => p.total));
+  const maxAssigneeTotal = Math.max(1, ...data.byAssignee.map((a) => a.total));
+
+  return (
+    <section className={styles.periodSection}>
+      <div className={styles.periodHeader}>
+        <h2>{title}</h2>
+        <p className={styles.subLine}>{subtitle}</p>
+      </div>
+
+      <div className={styles.statCards}>
+        <div className={styles.statCard} style={{ '--stat-accent': 'var(--color-accent)' }}>
+          <div className={styles.statValue}>{data.totalCreated}</div>
+          <div className={styles.statLabel}>Tasks created</div>
+        </div>
+        <div className={styles.statCard} style={{ '--stat-accent': 'var(--status-done)' }}>
+          <div className={styles.statValue}>{data.totalCompleted}</div>
+          <div className={styles.statLabel}>Tasks completed</div>
+        </div>
+        <div className={styles.statCard} style={{ '--stat-accent': 'var(--priority-high)' }}>
+          <div className={`${styles.statValue} ${data.overdueCount > 0 ? styles.statValueWarn : ''}`}>
+            {data.overdueCount}
+          </div>
+          <div className={styles.statLabel}>Overdue</div>
+        </div>
+        <div className={styles.statCard} style={{ '--stat-accent': 'var(--color-text-muted)' }}>
+          <div className={styles.statValue}>{pct(data.totalCompleted, data.totalCreated)}%</div>
+          <div className={styles.statLabel}>Completion rate</div>
+        </div>
+      </div>
+
+      <div className={styles.chartGrid}>
+        <div className={styles.chartCard}>
+          <p className={styles.chartTitle}>By status</p>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={statusData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#3a403e" vertical={false} />
+              <XAxis dataKey="label" stroke="#9aa39e" fontSize={12} />
+              <YAxis stroke="#9aa39e" fontSize={12} allowDecimals={false} />
+              <Tooltip contentStyle={{ background: '#2d3231', border: '1px solid #3a403e', fontSize: 13 }} />
+              <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                {statusData.map((entry) => (
+                  <Cell key={entry.status} fill={STATUS_COLORS[entry.status]} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className={styles.chartCard}>
+          <p className={styles.chartTitle}>By priority</p>
+          <ResponsiveContainer width="100%" height={200}>
+            <PieChart>
+              <Pie data={priorityData} dataKey="count" nameKey="priority" innerRadius={42} outerRadius={68} paddingAngle={3}>
+                {priorityData.map((entry) => (
+                  <Cell key={entry.priority} fill={PRIORITY_COLORS[entry.priority]} />
+                ))}
+              </Pie>
+              <Legend wrapperStyle={{ fontSize: 12, color: '#9aa39e' }} />
+              <Tooltip contentStyle={{ background: '#2d3231', border: '1px solid #3a403e', fontSize: 13 }} />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      <div className={styles.rundownGrid}>
+        <div className={styles.chartCard}>
+          <p className={styles.chartTitle}>By project</p>
+          {data.byProject.length === 0 ? (
+            <p className={styles.emptyText}>No tasks in this period.</p>
+          ) : (
+            <div className={styles.rundownList}>
+              {data.byProject.map((p) => (
+                <div key={p.project_id} className={styles.rundownRow}>
+                  <span className={styles.rundownDot} style={{ background: colorForProject(p.project_id) }} />
+                  <span className={styles.rundownName} title={p.project_name}>
+                    {p.project_name}
+                  </span>
+                  <div className={styles.rundownBarTrack}>
+                    <div
+                      className={styles.rundownBarFill}
+                      style={{
+                        width: `${(p.total / maxProjectTotal) * 100}%`,
+                        background: colorForProject(p.project_id),
+                      }}
+                    />
+                  </div>
+                  <span className={styles.rundownCount}>
+                    {p.completed}/{p.total} done
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className={styles.chartCard}>
+          <p className={styles.chartTitle}>By team member</p>
+          {data.byAssignee.length === 0 ? (
+            <p className={styles.emptyText}>No assigned tasks in this period.</p>
+          ) : (
+            <div className={styles.rundownList}>
+              {data.byAssignee.map((a) => (
+                <div key={a.id} className={styles.rundownRow}>
+                  <span className={styles.rundownName} title={a.name}>
+                    {a.name}
+                  </span>
+                  <div className={styles.rundownBarTrack}>
+                    <div
+                      className={styles.rundownBarFill}
+                      style={{ width: `${(a.total / maxAssigneeTotal) * 100}%`, background: 'var(--color-accent)' }}
+                    />
+                  </div>
+                  <span className={styles.rundownCount}>
+                    {a.total} task{a.total === 1 ? '' : 's'}
+                    {a.overdue > 0 && <span className={styles.rundownOverdue}> · {a.overdue} overdue</span>}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// Single-project dashboard — unchanged behavior from before, just scoped to
+// whichever project is chosen in the "Showing" dropdown rather than the
+// header's globally-selected project.
+function SingleProjectDashboard({ projectId }) {
   const [summary, setSummary] = useState(null);
   const [activity, setActivity] = useState([]);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (!currentProjectId) return;
+    setSummary(null);
+    setError('');
     dashboardApi
-      .getSummary(currentProjectId)
+      .getSummary(projectId)
       .then(setSummary)
       .catch(() => setError('Could not load dashboard data.'));
-  }, [currentProjectId]);
-
-  useEffect(() => {
-    if (!currentProjectId) return;
-    projectsApi.getActivity(currentProjectId).then(setActivity).catch(() => {});
-  }, [currentProjectId]);
+    projectsApi.getActivity(projectId).then(setActivity).catch(() => {});
+  }, [projectId]);
 
   if (error) {
-    return (
-      <div className={styles.dashScreen}>
-        <p style={{ color: 'var(--priority-high)' }}>{error}</p>
-      </div>
-    );
+    return <p style={{ color: 'var(--priority-high)' }}>{error}</p>;
   }
-
   if (!summary) {
-    return <div className={styles.dashScreen}>Loading dashboard…</div>;
+    return <p className={styles.subLine}>Loading…</p>;
   }
 
   const statusData = Object.entries(summary.byStatus).map(([status, count]) => ({
@@ -72,22 +222,11 @@ export default function DashboardPage() {
     label: STATUS_LABELS[status],
     count,
   }));
-
-  const priorityData = Object.entries(summary.byPriority).map(([priority, count]) => ({
-    priority,
-    count,
-  }));
-
-  const assigneeData = summary.byAssignee.map((a) => ({
-    name: a.name.split(' ')[0], // first name keeps bars compact
-    count: a.count,
-  }));
+  const priorityData = Object.entries(summary.byPriority).map(([priority, count]) => ({ priority, count }));
+  const assigneeData = summary.byAssignee.map((a) => ({ name: a.name.split(' ')[0], count: a.count }));
 
   return (
-    <div className={styles.dashScreen}>
-      <h1>Dashboard</h1>
-      <p className={styles.subLine}>A snapshot of where the project stands right now.</p>
-
+    <>
       <div className={styles.statCards}>
         <div className={styles.statCard} style={{ '--stat-accent': 'var(--color-text-muted)' }}>
           <div className={styles.statValue}>{summary.totalTasks}</div>
@@ -117,9 +256,7 @@ export default function DashboardPage() {
               <CartesianGrid strokeDasharray="3 3" stroke="#3a403e" vertical={false} />
               <XAxis dataKey="label" stroke="#9aa39e" fontSize={12} />
               <YAxis stroke="#9aa39e" fontSize={12} allowDecimals={false} />
-              <Tooltip
-                contentStyle={{ background: '#2d3231', border: '1px solid #3a403e', fontSize: 13 }}
-              />
+              <Tooltip contentStyle={{ background: '#2d3231', border: '1px solid #3a403e', fontSize: 13 }} />
               <Bar dataKey="count" radius={[4, 4, 0, 0]}>
                 {statusData.map((entry) => (
                   <Cell key={entry.status} fill={STATUS_COLORS[entry.status]} />
@@ -133,22 +270,13 @@ export default function DashboardPage() {
           <p className={styles.chartTitle}>Tasks by priority</p>
           <ResponsiveContainer width="100%" height={240}>
             <PieChart>
-              <Pie
-                data={priorityData}
-                dataKey="count"
-                nameKey="priority"
-                innerRadius={50}
-                outerRadius={80}
-                paddingAngle={3}
-              >
+              <Pie data={priorityData} dataKey="count" nameKey="priority" innerRadius={50} outerRadius={80} paddingAngle={3}>
                 {priorityData.map((entry) => (
                   <Cell key={entry.priority} fill={PRIORITY_COLORS[entry.priority]} />
                 ))}
               </Pie>
               <Legend wrapperStyle={{ fontSize: 12, color: '#9aa39e' }} />
-              <Tooltip
-                contentStyle={{ background: '#2d3231', border: '1px solid #3a403e', fontSize: 13 }}
-              />
+              <Tooltip contentStyle={{ background: '#2d3231', border: '1px solid #3a403e', fontSize: 13 }} />
             </PieChart>
           </ResponsiveContainer>
         </div>
@@ -160,9 +288,7 @@ export default function DashboardPage() {
               <CartesianGrid strokeDasharray="3 3" stroke="#3a403e" horizontal={false} />
               <XAxis type="number" stroke="#9aa39e" fontSize={12} allowDecimals={false} />
               <YAxis type="category" dataKey="name" stroke="#9aa39e" fontSize={12} width={80} />
-              <Tooltip
-                contentStyle={{ background: '#2d3231', border: '1px solid #3a403e', fontSize: 13 }}
-              />
+              <Tooltip contentStyle={{ background: '#2d3231', border: '1px solid #3a403e', fontSize: 13 }} />
               <Bar dataKey="count" fill="#c98a3e" radius={[0, 4, 4, 0]} />
             </BarChart>
           </ResponsiveContainer>
@@ -172,9 +298,7 @@ export default function DashboardPage() {
       <div className={styles.chartCard} style={{ marginTop: 20 }}>
         <p className={styles.chartTitle}>Recent activity</p>
         {activity.length === 0 ? (
-          <p style={{ color: 'var(--color-text-muted)', fontSize: 13, fontStyle: 'italic' }}>
-            Nothing yet.
-          </p>
+          <p className={styles.emptyText}>Nothing yet.</p>
         ) : (
           <div>
             {activity.map((a, i) => (
@@ -182,12 +306,9 @@ export default function DashboardPage() {
                 <span>
                   <span
                     className={styles.activityDot}
-                    style={{
-                      background: a.type === 'task_created' ? 'var(--status-done)' : 'var(--status-review)',
-                    }}
+                    style={{ background: a.type === 'task_created' ? 'var(--status-done)' : 'var(--status-review)' }}
                   />
-                  <strong>{a.actor_name}</strong>{' '}
-                  {a.type === 'task_created' ? 'created' : 'commented on'}{' '}
+                  <strong>{a.actor_name}</strong> {a.type === 'task_created' ? 'created' : 'commented on'}{' '}
                   <span style={{ color: 'var(--color-accent)' }}>{a.task_title}</span>
                 </span>
                 <span className={styles.activityTime}>{timeAgo(a.at)}</span>
@@ -196,6 +317,107 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+    </>
+  );
+}
+
+export default function DashboardPage() {
+  const { projects } = useProject();
+  const [projectFilter, setProjectFilter] = useState(
+    () => localStorage.getItem(PROJECT_FILTER_STORAGE_KEY) || ALL_PROJECTS
+  );
+  const [overview, setOverview] = useState(null);
+  const [overviewError, setOverviewError] = useState('');
+
+  const showingAllProjects = projectFilter === ALL_PROJECTS;
+
+  function handleProjectFilterChange(value) {
+    setProjectFilter(value);
+    localStorage.setItem(PROJECT_FILTER_STORAGE_KEY, value);
+  }
+
+  useEffect(() => {
+    if (!showingAllProjects) return;
+    setOverview(null);
+    setOverviewError('');
+    dashboardApi
+      .getOverview()
+      .then(setOverview)
+      .catch(() => setOverviewError('Could not load the consolidated report.'));
+  }, [showingAllProjects]);
+
+  if (projects.length === 0) {
+    return (
+      <div className={styles.dashScreen}>
+        <h1>Dashboard</h1>
+        <p className={styles.subLine}>No projects yet.</p>
+      </div>
+    );
+  }
+
+  const headerTitle = showingAllProjects
+    ? 'All Projects'
+    : projects.find((p) => p.id === projectFilter)?.name || 'Dashboard';
+
+  return (
+    <div className={styles.dashScreen}>
+      <div className={styles.header}>
+        <div>
+          <h1>{headerTitle}</h1>
+          <p className={styles.subLine}>
+            {showingAllProjects
+              ? 'A consolidated snapshot across every project — this month and this fiscal year.'
+              : 'A snapshot of where this project stands right now.'}
+          </p>
+        </div>
+        <label className={styles.rangeLabel}>
+          Showing
+          <select value={projectFilter} onChange={(e) => handleProjectFilterChange(e.target.value)}>
+            <option value={ALL_PROJECTS}>All projects</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      {showingAllProjects ? (
+        overviewError ? (
+          <p style={{ color: 'var(--priority-high)' }}>{overviewError}</p>
+        ) : !overview ? (
+          <p className={styles.subLine}>Loading…</p>
+        ) : (
+          <>
+            <div className={styles.statCards}>
+              <div className={styles.statCard} style={{ '--stat-accent': 'var(--color-text-muted)' }}>
+                <div className={styles.statValue}>{overview.totals.projects}</div>
+                <div className={styles.statLabel}>Projects</div>
+              </div>
+              <div className={styles.statCard} style={{ '--stat-accent': 'var(--color-accent)' }}>
+                <div className={styles.statValue}>{overview.totals.tasks}</div>
+                <div className={styles.statLabel}>Total tasks (all time)</div>
+              </div>
+              <div className={styles.statCard} style={{ '--stat-accent': 'var(--status-done)' }}>
+                <div className={styles.statValue}>{overview.totals.completed}</div>
+                <div className={styles.statLabel}>Completed (all time)</div>
+              </div>
+              <div className={styles.statCard} style={{ '--stat-accent': 'var(--priority-high)' }}>
+                <div className={`${styles.statValue} ${overview.totals.overdue > 0 ? styles.statValueWarn : ''}`}>
+                  {overview.totals.overdue}
+                </div>
+                <div className={styles.statLabel}>Overdue right now</div>
+              </div>
+            </div>
+
+            <PeriodSection title="This Month" subtitle={overview.month.label} data={overview.month} />
+            <PeriodSection title="Fiscal Year" subtitle={overview.fiscalYear.label} data={overview.fiscalYear} />
+          </>
+        )
+      ) : (
+        <SingleProjectDashboard projectId={projectFilter} />
+      )}
     </div>
   );
 }

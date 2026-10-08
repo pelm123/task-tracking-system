@@ -52,7 +52,11 @@ CREATE TABLE tasks (
     reminder_hours_before INTEGER NOT NULL DEFAULT 24,
     created_by   UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- set when status transitions to 'done', cleared if reopened — used for
+    -- month / fiscal-year completion reporting on the dashboard, since
+    -- updated_at is bumped on every edit and can't be used for that
+    completed_at TIMESTAMPTZ
 );
 
 CREATE INDEX idx_tasks_project   ON tasks(project_id);
