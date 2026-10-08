@@ -2,7 +2,13 @@ import { useEffect, useState, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import * as commentsApi from '../api/comments';
 import * as attachmentsApi from '../api/attachments';
-import { REMINDER_PRESETS, DEFAULT_REMINDER_HOURS, getDueCountdown } from '../utils/dueDate';
+import {
+  REMINDER_PRESETS,
+  DEFAULT_REMINDER_HOURS,
+  getDueCountdown,
+  toDateInputValue,
+  dateInputToDueTimestamp,
+} from '../utils/dueDate';
 import styles from './modal.module.css';
 
 function timeAgo(dateStr) {
@@ -13,12 +19,6 @@ function timeAgo(dateStr) {
   const hours = Math.floor(mins / 60);
   if (hours < 24) return `${hours}h ago`;
   return `${Math.floor(hours / 24)}d ago`;
-}
-
-// task.due_date arrives as a full timestamp; <input type="date"> needs YYYY-MM-DD
-function toDateInputValue(dueDate) {
-  if (!dueDate) return '';
-  return new Date(dueDate).toISOString().slice(0, 10);
 }
 
 export default function TaskDetailModal({ task, users, onClose, onUpdate, onDelete, canApprove, onApprove, onDeny }) {
@@ -97,7 +97,9 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
         // only send a due_date change when the person was actually allowed
         // to make one — a disabled input never changes, but this keeps the
         // request honest even if that ever stops being true
-        due_date: canReschedule ? dueDate || null : toDateInputValue(task.due_date) || null,
+        due_date: canReschedule
+          ? (dueDate ? dateInputToDueTimestamp(dueDate) : null)
+          : task.due_date || null,
         // same permission as the due date itself — only someone who can
         // reschedule the task can change how far ahead it warns them
         reminder_hours_before: canReschedule ? reminderHours : task.reminder_hours_before,
