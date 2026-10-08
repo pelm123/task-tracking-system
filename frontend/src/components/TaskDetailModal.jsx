@@ -76,7 +76,17 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
 
   const [attachments, setAttachments] = useState([]);
   const [uploading, setUploading] = useState(false);
+  const [preview, setPreview] = useState(null); // { url, mimeType, name }
+  const [previewLoading, setPreviewLoading] = useState(false);
   const fileInputRef = useRef(null);
+
+  // Revoke the blob URL whenever the preview closes or the component
+  // unmounts with one still open, so we don't leak memory.
+  useEffect(() => {
+    return () => {
+      if (preview) window.URL.revokeObjectURL(preview.url);
+    };
+  }, [preview]);
 
   // Only (re)load comments/attachments when switching to a different task —
   // NOT on every task.updated_at change. That used to also be a dependency
@@ -197,7 +207,7 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
       const created = await attachmentsApi.uploadAttachment(task.id, file);
       setAttachments((prev) => [created, ...prev]);
     } catch (err) {
-      setError('Could not upload file');
+      setError(err.response?.data?.message || 'Could not upload file');
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -210,6 +220,28 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
     } catch (err) {
       setError('Could not download file');
     }
+  }
+
+  // Clicking an image/PDF's name opens it in the in-app preview modal;
+  // anything else just downloads, same as before.
+  async function handleOpenAttachment(att) {
+    if (!attachmentsApi.isPreviewable(att.mime_type)) {
+      return handleDownload(att);
+    }
+    setPreviewLoading(true);
+    try {
+      const url = await attachmentsApi.getPreviewUrl(att.id);
+      setPreview({ id: att.id, url, mimeType: att.mime_type, name: att.file_name });
+    } catch (err) {
+      setError('Could not preview file');
+    } finally {
+      setPreviewLoading(false);
+    }
+  }
+
+  function closePreview() {
+    if (preview) window.URL.revokeObjectURL(preview.url);
+    setPreview(null);
   }
 
   // Mirrors the backend rule in deleteAttachment: admin/pm can delete any
@@ -494,28 +526,45 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
             <p className={styles.emptyText}>No files attached.</p>
           ) : (
             <div className={styles.attachmentList}>
-              {attachments.map((a) => (
-                <div key={a.id} className={styles.attachmentItem}>
-                  <button className={styles.attachmentName} onClick={() => handleDownload(a)}>
-                    {a.file_name}
-                  </button>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ color: 'var(--color-text-muted)' }}>
-                      {(a.file_size / 1024).toFixed(0)} KB
+              {attachments.map((a) => {
+                const previewable = attachmentsApi.isPreviewable(a.mime_type);
+                return (
+                  <div key={a.id} className={styles.attachmentItem}>
+                    <button
+                      className={styles.attachmentName}
+                      onClick={() => handleOpenAttachment(a)}
+                      title={previewable ? 'Click to preview' : 'Click to download'}
+                    >
+                      {previewable && <span aria-hidden="true">🖼 </span>}
+                      {a.file_name}
+                    </button>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ color: 'var(--color-text-muted)' }}>
+                        {(a.file_size / 1024).toFixed(0)} KB
+                      </span>
+                      {previewable && (
+                        <button
+                          onClick={() => handleDownload(a)}
+                          style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: 12, padding: 0 }}
+                        >
+                          Download
+                        </button>
+                      )}
+                      {canDeleteAttachment(a) && (
+                        <button
+                          onClick={() => handleDeleteAttachment(a)}
+                          style={{ background: 'none', border: 'none', color: 'var(--priority-high)', cursor: 'pointer', fontSize: 12, padding: 0 }}
+                        >
+                          Delete
+                        </button>
+                      )}
                     </span>
-                    {canDeleteAttachment(a) && (
-                      <button
-                        onClick={() => handleDeleteAttachment(a)}
-                        style={{ background: 'none', border: 'none', color: 'var(--priority-high)', cursor: 'pointer', fontSize: 12, padding: 0 }}
-                      >
-                        Delete
-                      </button>
-                    )}
-                  </span>
-                </div>
-              ))}
+                  </div>
+                );
+              })}
             </div>
           )}
+          {previewLoading && <p className={styles.emptyText}>Loading preview…</p>}
 
           {isUnassignedMember ? (
             <p className={styles.emptyText} style={{ marginTop: 8 }}>
@@ -529,6 +578,46 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
           )}
         </div>
       </div>
+
+      {preview && (
+        <div
+          className={styles.previewOverlay}
+          onClick={(e) => {
+            e.stopPropagation();
+            closePreview();
+          }}
+        >
+          <div className={styles.previewModal} onClick={(e) => e.stopPropagation()}>
+            <div className={styles.previewHeader}>
+              <span className={styles.previewName}>{preview.name}</span>
+              <div className={styles.previewActions}>
+                <button
+                  className={styles.previewDownloadBtn}
+                  onClick={() => handleDownload({ id: preview.id, file_name: preview.name })}
+                >
+                  Download
+                </button>
+                <button
+                  className={styles.closeBtn}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    closePreview();
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+            <div className={styles.previewBody}>
+              {preview.mimeType.startsWith('image/') ? (
+                <img src={preview.url} alt={preview.name} className={styles.previewImage} />
+              ) : (
+                <iframe src={preview.url} title={preview.name} className={styles.previewFrame} />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
