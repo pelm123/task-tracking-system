@@ -4,6 +4,8 @@ const { notifyLineIfLinked } = require('../config/line');
 const VALID_STATUSES = ['todo', 'in_progress', 'review', 'done'];
 const VALID_PRIORITIES = ['low', 'medium', 'high'];
 const STATUS_LABELS = { todo: 'To Do', in_progress: 'In Progress', review: 'Review', done: 'Done' };
+const MIN_REMINDER_HOURS = 1;
+const MAX_REMINDER_HOURS = 24 * 30; // 30 days — generous ceiling, not a real limit
 
 // shared SELECT fragment: aggregates every row in task_assignees into a
 // single JSON array per task, e.g. [{"id": "...", "name": "Alice"}, ...]
@@ -44,9 +46,15 @@ function formatDueDate(dueDate) {
   });
 }
 
+// true if n is a finite integer within [MIN_REMINDER_HOURS, MAX_REMINDER_HOURS]
+function isValidReminderHours(n) {
+  return Number.isInteger(n) && n >= MIN_REMINDER_HOURS && n <= MAX_REMINDER_HOURS;
+}
+
 async function getEnrichedTask(id) {
   const result = await pool.query(
     `SELECT t.id, t.title, t.description, t.status, t.priority, t.due_date,
+            t.reminder_hours_before,
             t.project_id, p.name AS project_name,
             t.created_by, c.name AS creator_name,
             t.created_at, t.updated_at,
@@ -130,6 +138,7 @@ async function listTasks(req, res) {
   try {
     const result = await pool.query(
       `SELECT t.id, t.title, t.description, t.status, t.priority, t.due_date,
+              t.reminder_hours_before,
               t.project_id, p.name AS project_name,
               t.created_by, c.name AS creator_name,
               t.created_at, t.updated_at,
@@ -164,7 +173,7 @@ async function getTask(req, res) {
 
 // POST /tasks
 async function createTask(req, res) {
-  const { title, description, priority, due_date, assignee_ids, project_id } = req.body;
+  const { title, description, priority, due_date, reminder_hours_before, assignee_ids, project_id } = req.body;
 
   if (!title) {
     return res.status(400).json({ message: 'title is required' });
@@ -175,13 +184,18 @@ async function createTask(req, res) {
   if (priority && !VALID_PRIORITIES.includes(priority)) {
     return res.status(400).json({ message: `priority must be one of ${VALID_PRIORITIES.join(', ')}` });
   }
+  if (reminder_hours_before !== undefined && !isValidReminderHours(reminder_hours_before)) {
+    return res.status(400).json({
+      message: `reminder_hours_before must be a whole number of hours between ${MIN_REMINDER_HOURS} and ${MAX_REMINDER_HOURS}`,
+    });
+  }
 
   try {
     const result = await pool.query(
-      `INSERT INTO tasks (project_id, title, description, priority, due_date, created_by)
-       VALUES ($1, $2, $3, COALESCE($4::task_priority, 'medium'), $5, $6)
+      `INSERT INTO tasks (project_id, title, description, priority, due_date, reminder_hours_before, created_by)
+       VALUES ($1, $2, $3, COALESCE($4::task_priority, 'medium'), $5, COALESCE($6, 24), $7)
        RETURNING id`,
-      [project_id, title, description || null, priority, due_date || null, req.user.id]
+      [project_id, title, description || null, priority, due_date || null, reminder_hours_before, req.user.id]
     );
 
     const taskId = result.rows[0].id;
@@ -226,15 +240,20 @@ function sameIdSet(a, b) {
 
 // PATCH /tasks/:id  (general edit: title, description, priority, due_date, assignee_ids)
 async function updateTask(req, res) {
-  const { title, description, priority, due_date, assignee_ids } = req.body;
+  const { title, description, priority, due_date, reminder_hours_before, assignee_ids } = req.body;
 
   if (priority && !VALID_PRIORITIES.includes(priority)) {
     return res.status(400).json({ message: `priority must be one of ${VALID_PRIORITIES.join(', ')}` });
   }
+  if (reminder_hours_before !== undefined && !isValidReminderHours(reminder_hours_before)) {
+    return res.status(400).json({
+      message: `reminder_hours_before must be a whole number of hours between ${MIN_REMINDER_HOURS} and ${MAX_REMINDER_HOURS}`,
+    });
+  }
 
   try {
     const before = await pool.query(
-      'SELECT id, title, description, priority, due_date FROM tasks WHERE id = $1',
+      'SELECT id, title, description, priority, due_date, reminder_hours_before FROM tasks WHERE id = $1',
       [req.params.id]
     );
     if (before.rows.length === 0) {
@@ -243,9 +262,10 @@ async function updateTask(req, res) {
     const existing = before.rows[0];
 
     // A member who isn't assigned to this task can only view it, not edit
-    // any part of it — title, description, priority, due date, or who's
-    // assigned. PM/admin aren't restricted. Each check only fires when that
-    // field is actually changing, so saving a no-op form never 403s.
+    // any part of it — title, description, priority, due date, reminder
+    // lead time, or who's assigned. PM/admin aren't restricted. Each check
+    // only fires when that field is actually changing, so saving a no-op
+    // form never 403s.
     if (req.user.role === 'member') {
       const currentlyAssigned = await isAssignedToTask(req.params.id, req.user.id);
       if (!currentlyAssigned) {
@@ -259,6 +279,15 @@ async function updateTask(req, res) {
 
         if (due_date !== undefined && !sameDueDate(due_date, existing.due_date)) {
           return res.status(403).json({ message: 'You can only reschedule tasks you are assigned to.' });
+        }
+
+        if (
+          reminder_hours_before !== undefined &&
+          reminder_hours_before !== existing.reminder_hours_before
+        ) {
+          return res.status(403).json({
+            message: 'You can only change the reminder time on tasks you are assigned to.',
+          });
         }
 
         if (assignee_ids !== undefined) {
@@ -281,9 +310,10 @@ async function updateTask(req, res) {
          title = COALESCE($1, title),
          description = COALESCE($2, description),
          priority = COALESCE($3::task_priority, priority),
-         due_date = COALESCE($4, due_date)
-       WHERE id = $5`,
-      [title, description, priority, due_date, req.params.id]
+         due_date = COALESCE($4, due_date),
+         reminder_hours_before = COALESCE($5, reminder_hours_before)
+       WHERE id = $6`,
+      [title, description, priority, due_date, reminder_hours_before, req.params.id]
     );
 
     // assignee_ids is optional on this endpoint — only touch the assignee
@@ -460,7 +490,8 @@ async function denyTask(req, res) {
   }
 }
 
-// DELETE /tasks/:id — admin/pm, or the task's own creator
+// DELETE /tasks/:id — admin/pm can delete any task; a member can delete
+// only a task they created themselves
 async function deleteTask(req, res) {
   try {
     const existing = await pool.query('SELECT created_by, project_id FROM tasks WHERE id = $1', [req.params.id]);
@@ -469,9 +500,9 @@ async function deleteTask(req, res) {
     }
 
     const isPrivileged = ['admin', 'pm'].includes(req.user.role);
-    const isOwner = existing.rows[0].created_by === req.user.id;
-    if (!isPrivileged && !isOwner) {
-      return res.status(403).json({ message: 'Only an admin, PM, or the task creator can delete this task' });
+    const isCreator = existing.rows[0].created_by === req.user.id;
+    if (!isPrivileged && !isCreator) {
+      return res.status(403).json({ message: 'You can only delete tasks you created.' });
     }
 
     await pool.query('DELETE FROM tasks WHERE id = $1', [req.params.id]);
@@ -595,9 +626,20 @@ async function bulkDelete(req, res) {
 
   try {
     const existing = await pool.query(
-      `SELECT id, project_id FROM tasks WHERE id = ANY($1::uuid[])`,
+      `SELECT id, created_by, project_id FROM tasks WHERE id = ANY($1::uuid[])`,
       [taskIds]
     );
+
+    // admin/pm can bulk-delete anything; a member can only bulk-delete
+    // tasks they created themselves — reject the whole batch if any
+    // selected task isn't theirs, rather than silently deleting some.
+    if (!['admin', 'pm'].includes(req.user.role)) {
+      const notOwned = existing.rows.some((row) => row.created_by !== req.user.id);
+      if (notOwned) {
+        return res.status(403).json({ message: 'You can only delete tasks you created.' });
+      }
+    }
+
     await pool.query(`DELETE FROM tasks WHERE id = ANY($1::uuid[])`, [taskIds]);
     for (const row of existing.rows) {
       broadcastTask(req, row.project_id, 'task:deleted', { id: row.id });

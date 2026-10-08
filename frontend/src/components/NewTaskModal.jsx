@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import styles from './modal.module.css';
+import { REMINDER_PRESETS, DEFAULT_REMINDER_HOURS, dateInputToDueTimestamp } from '../utils/dueDate';
 
 export default function NewTaskModal({ users, onClose, onCreate }) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState('medium');
   const [dueDate, setDueDate] = useState('');
+  const [reminderHours, setReminderHours] = useState(DEFAULT_REMINDER_HOURS);
   const [assigneeIds, setAssigneeIds] = useState([]);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -29,7 +31,8 @@ export default function NewTaskModal({ users, onClose, onCreate }) {
         title: title.trim(),
         description: description.trim() || undefined,
         priority,
-        due_date: dueDate || undefined,
+        due_date: dueDate ? dateInputToDueTimestamp(dueDate) : undefined,
+        reminder_hours_before: dueDate ? reminderHours : undefined,
         assignee_ids: assigneeIds,
       });
       onClose();
@@ -85,6 +88,23 @@ export default function NewTaskModal({ users, onClose, onCreate }) {
               />
             </div>
           </div>
+
+          {dueDate && (
+            <div className={styles.field}>
+              <label htmlFor="reminderHours">Remind me</label>
+              <select
+                id="reminderHours"
+                value={reminderHours}
+                onChange={(e) => setReminderHours(Number(e.target.value))}
+              >
+                {REMINDER_PRESETS.map((opt) => (
+                  <option key={opt.hours} value={opt.hours}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className={styles.field}>
             <label>
