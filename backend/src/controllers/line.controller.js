@@ -28,6 +28,52 @@ async function getLinkCode(req, res) {
   }
 }
 
+const NOTIFICATION_TYPES = ['assigned', 'status_change', 'comment', 'due_soon', 'approved', 'approval_denied'];
+
+// GET /line/preferences — which notification types currently push to LINE
+// for this user (independent of whether they're actually linked yet)
+async function getPreferences(req, res) {
+  try {
+    const result = await pool.query(
+      'SELECT line_notification_prefs FROM users WHERE id = $1',
+      [req.user.id]
+    );
+    res.json(result.rows[0]?.line_notification_prefs || {});
+  } catch (err) {
+    console.error('Get LINE preferences error:', err.message);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+// PATCH /line/preferences — body is a partial { [notificationType]: boolean }
+// map; merged into the existing preferences rather than replacing them, so
+// toggling one type never silently resets the others.
+async function updatePreferences(req, res) {
+  const updates = req.body || {};
+
+  const invalidKey = Object.keys(updates).find((key) => !NOTIFICATION_TYPES.includes(key));
+  if (invalidKey) {
+    return res.status(400).json({ message: `Unknown notification type: ${invalidKey}` });
+  }
+  const invalidValue = Object.values(updates).some((v) => typeof v !== 'boolean');
+  if (invalidValue) {
+    return res.status(400).json({ message: 'Each preference value must be true or false' });
+  }
+
+  try {
+    const result = await pool.query(
+      `UPDATE users SET line_notification_prefs = line_notification_prefs || $1::jsonb
+       WHERE id = $2
+       RETURNING line_notification_prefs`,
+      [JSON.stringify(updates), req.user.id]
+    );
+    res.json(result.rows[0].line_notification_prefs);
+  } catch (err) {
+    console.error('Update LINE preferences error:', err.message);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
 // DELETE /line/link — unlink the current user's LINE account
 async function unlink(req, res) {
   try {
@@ -90,4 +136,4 @@ async function handleWebhook(req, res) {
   }
 }
 
-module.exports = { getLinkCode, unlink, handleWebhook };
+module.exports = { getLinkCode, unlink, handleWebhook, getPreferences, updatePreferences };

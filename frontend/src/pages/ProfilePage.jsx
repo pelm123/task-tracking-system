@@ -6,6 +6,15 @@ import styles from './profile.module.css';
 
 const ROLE_LABELS = { admin: 'Admin', pm: 'Project manager', member: 'Team member' };
 
+const NOTIFICATION_TYPE_LABELS = [
+  { key: 'assigned', label: "You're assigned to a task" },
+  { key: 'status_change', label: "A task you're on changes status" },
+  { key: 'comment', label: 'Someone comments on your task' },
+  { key: 'due_soon', label: 'A task is due soon (your reminder setting)' },
+  { key: 'approved', label: 'Your task is approved' },
+  { key: 'approval_denied', label: 'Your task is sent back for changes' },
+];
+
 export default function ProfilePage() {
   const { user, updateUser } = useAuth();
 
@@ -22,6 +31,8 @@ export default function ProfilePage() {
 
   const [lineStatus, setLineStatus] = useState(null);
   const [lineLoading, setLineLoading] = useState(true);
+  const [linePrefs, setLinePrefs] = useState(null);
+  const [prefError, setPrefError] = useState('');
 
   useEffect(() => {
     lineApi
@@ -30,6 +41,26 @@ export default function ProfilePage() {
       .catch(() => {})
       .finally(() => setLineLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (!lineStatus?.linked) return;
+    lineApi
+      .getNotificationPreferences()
+      .then(setLinePrefs)
+      .catch(() => {});
+  }, [lineStatus?.linked]);
+
+  async function handleTogglePref(key) {
+    const next = { ...linePrefs, [key]: !linePrefs[key] };
+    setLinePrefs(next); // optimistic
+    setPrefError('');
+    try {
+      await lineApi.updateNotificationPreferences({ [key]: next[key] });
+    } catch (err) {
+      setLinePrefs(linePrefs); // revert
+      setPrefError('Could not save that setting.');
+    }
+  }
 
   async function handleNameSubmit(e) {
     e.preventDefault();
@@ -135,7 +166,27 @@ export default function ProfilePage() {
             <p className={styles.lineHint}>Loading…</p>
           ) : lineStatus?.linked ? (
             <div>
-              <p className={styles.lineLinked}>✓ Your LINE account is linked. You'll get task notifications there.</p>
+              <p className={styles.lineLinked}>✓ Your LINE account is linked.</p>
+
+              <p className={styles.lineHint}>Choose which of these send you a LINE message:</p>
+              {linePrefs ? (
+                <div className={styles.prefList}>
+                  {NOTIFICATION_TYPE_LABELS.map(({ key, label }) => (
+                    <label key={key} className={styles.prefRow}>
+                      <input
+                        type="checkbox"
+                        checked={linePrefs[key] !== false}
+                        onChange={() => handleTogglePref(key)}
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <p className={styles.lineHint}>Loading preferences…</p>
+              )}
+              {prefError && <p className={styles.errorText}>{prefError}</p>}
+
               <button className="btn btn-danger" onClick={handleUnlinkLine}>
                 Unlink LINE
               </button>

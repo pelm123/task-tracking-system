@@ -48,15 +48,26 @@ function pushToLine(lineUserId, text) {
   });
 }
 
-// look up whether this app user has linked a LINE account, and if so push to it.
+// look up whether this app user has linked a LINE account, and if so push to
+// it — unless they've turned this specific notification type off in their
+// LINE notification settings (see ProfilePage). `type` should be one of the
+// notification_type enum values; omit it to always push regardless of
+// preference (used only for the "you're now linked" confirmation message).
 // Safe to call unconditionally — silently no-ops if not linked or not configured.
-async function notifyLineIfLinked(userId, text) {
+async function notifyLineIfLinked(userId, text, type) {
   try {
-    const result = await pool.query('SELECT line_user_id FROM users WHERE id = $1', [userId]);
-    const lineUserId = result.rows[0]?.line_user_id;
-    if (lineUserId) {
-      await pushToLine(lineUserId, text);
+    const result = await pool.query(
+      'SELECT line_user_id, line_notification_prefs FROM users WHERE id = $1',
+      [userId]
+    );
+    const row = result.rows[0];
+    if (!row?.line_user_id) return;
+
+    if (type && row.line_notification_prefs && row.line_notification_prefs[type] === false) {
+      return; // this user turned this notification type off
     }
+
+    await pushToLine(row.line_user_id, text);
   } catch (err) {
     console.error('[line] notifyLineIfLinked error:', err.message);
   }

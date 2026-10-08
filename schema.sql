@@ -17,6 +17,12 @@ CREATE TABLE users (
     email         VARCHAR(255) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
     role          user_role NOT NULL DEFAULT 'member',
+    line_user_id  VARCHAR(64) UNIQUE,
+    line_link_code VARCHAR(10) UNIQUE,
+    -- which notification_type values push to LINE once an account is
+    -- linked; all on by default (see ProfilePage's "LINE notifications")
+    line_notification_prefs JSONB NOT NULL DEFAULT
+      '{"assigned": true, "status_change": true, "comment": true, "due_soon": true, "approved": true, "approval_denied": true}'::jsonb,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

@@ -38,11 +38,15 @@ async function getUserName(userId) {
 
 function formatDueDate(dueDate) {
   if (!dueDate) return 'no due date';
+  // Pin to Bangkok time — without an explicit timeZone this renders in the
+  // SERVER's local time (often UTC), which made a 6:00 PM due date show up
+  // in notifications as 11:00 AM. See dueDateCheck.js for the same fix.
   return new Date(dueDate).toLocaleString('en-US', {
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
+    timeZone: 'Asia/Bangkok',
   });
 }
 
@@ -86,7 +90,7 @@ async function notifyAssignees(task, userIds, actorId) {
     } catch (err) {
       console.error('notifyAssignees error:', err.message);
     }
-    notifyLineIfLinked(userId, `📋 ${message}`);
+    notifyLineIfLinked(userId, `📋 ${message}`, 'assigned');
   }
 }
 
@@ -387,7 +391,7 @@ async function updateTaskStatus(req, res) {
            VALUES ($1, $2, 'status_change', $3)`,
           [assignee.id, task.id, message]
         );
-        notifyLineIfLinked(assignee.id, `🔄 ${message}`);
+        notifyLineIfLinked(assignee.id, `🔄 ${message}`, 'status_change');
       }
     }
     broadcastTask(req, task.project_id, 'task:upserted', task);
@@ -424,7 +428,7 @@ async function approveTask(req, res) {
          VALUES ($1, $2, 'approved', $3)`,
         [assignee.id, task.id, message]
       );
-      notifyLineIfLinked(assignee.id, `✅ ${message}`);
+      notifyLineIfLinked(assignee.id, `✅ ${message}`, 'approved');
     }
 
     broadcastTask(req, task.project_id, 'task:upserted', task);
@@ -479,7 +483,7 @@ async function denyTask(req, res) {
          VALUES ($1, $2, 'approval_denied', $3)`,
         [assignee.id, task.id, message]
       );
-      notifyLineIfLinked(assignee.id, `↩️ ${message}`);
+      notifyLineIfLinked(assignee.id, `↩️ ${message}`, 'approval_denied');
     }
 
     broadcastTask(req, task.project_id, 'task:upserted', task);

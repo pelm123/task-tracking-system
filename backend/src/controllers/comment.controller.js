@@ -74,7 +74,7 @@ async function createComment(req, res) {
            VALUES ($1, $2, 'comment', $3)`,
           [assigneeId, task.id, message]
         );
-        notifyLineIfLinked(assigneeId, `💬 ${message}`);
+        notifyLineIfLinked(assigneeId, `💬 ${message}`, 'comment');
       }
     }
 
