@@ -33,6 +33,19 @@ async function uploadAttachment(req, res) {
       return res.status(404).json({ message: 'Task not found' });
     }
 
+    // A member who isn't assigned to this task can't upload files to it.
+    // PM/admin can upload to anything.
+    if (req.user.role === 'member') {
+      const assignedCheck = await pool.query(
+        'SELECT 1 FROM task_assignees WHERE task_id = $1 AND user_id = $2',
+        [req.params.taskId, req.user.id]
+      );
+      if (assignedCheck.rows.length === 0) {
+        fs.unlinkSync(req.file.path); // clean up the upload we're about to refuse
+        return res.status(403).json({ message: 'You can only upload files to tasks you are assigned to.' });
+      }
+    }
+
     const result = await pool.query(
       `INSERT INTO attachments (task_id, uploaded_by, file_name, file_path, file_size, mime_type)
        VALUES ($1, $2, $3, $4, $5, $6)

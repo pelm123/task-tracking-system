@@ -204,6 +204,26 @@ function sameDueDate(a, b) {
   return new Date(a).getTime() === new Date(b).getTime();
 }
 
+// true if a user is currently one of a task's assignees
+async function isAssignedToTask(taskId, userId) {
+  const result = await pool.query(
+    'SELECT 1 FROM task_assignees WHERE task_id = $1 AND user_id = $2',
+    [taskId, userId]
+  );
+  return result.rows.length > 0;
+}
+
+// true if two sets of assignee IDs (arrays, possibly with duplicates/nulls) contain the same users
+function sameIdSet(a, b) {
+  const setA = new Set((a || []).filter(Boolean));
+  const setB = new Set((b || []).filter(Boolean));
+  if (setA.size !== setB.size) return false;
+  for (const id of setA) {
+    if (!setB.has(id)) return false;
+  }
+  return true;
+}
+
 // PATCH /tasks/:id  (general edit: title, description, priority, due_date, assignee_ids)
 async function updateTask(req, res) {
   const { title, description, priority, due_date, assignee_ids } = req.body;
@@ -213,26 +233,46 @@ async function updateTask(req, res) {
   }
 
   try {
-    const before = await pool.query('SELECT id, due_date FROM tasks WHERE id = $1', [req.params.id]);
+    const before = await pool.query(
+      'SELECT id, title, description, priority, due_date FROM tasks WHERE id = $1',
+      [req.params.id]
+    );
     if (before.rows.length === 0) {
       return res.status(404).json({ message: 'Task not found' });
     }
+    const existing = before.rows[0];
 
-    // Members can reschedule (change the due date of) a task only when
-    // they're one of its assignees — they can't move someone else's dates
-    // around. PM/admin aren't restricted. Only enforced when the due date
-    // is actually changing, so saving the rest of the form doesn't 403.
-    if (
-      due_date !== undefined &&
-      req.user.role === 'member' &&
-      !sameDueDate(due_date, before.rows[0].due_date)
-    ) {
-      const assignedCheck = await pool.query(
-        'SELECT 1 FROM task_assignees WHERE task_id = $1 AND user_id = $2',
-        [req.params.id, req.user.id]
-      );
-      if (assignedCheck.rows.length === 0) {
-        return res.status(403).json({ message: 'You can only reschedule tasks you are assigned to.' });
+    // A member who isn't assigned to this task can only view it, not edit
+    // any part of it — title, description, priority, due date, or who's
+    // assigned. PM/admin aren't restricted. Each check only fires when that
+    // field is actually changing, so saving a no-op form never 403s.
+    if (req.user.role === 'member') {
+      const currentlyAssigned = await isAssignedToTask(req.params.id, req.user.id);
+      if (!currentlyAssigned) {
+        const changingCore =
+          (title !== undefined && title !== existing.title) ||
+          (description !== undefined && description !== (existing.description || '')) ||
+          (priority !== undefined && priority !== existing.priority);
+        if (changingCore) {
+          return res.status(403).json({ message: 'You can only edit tasks you are assigned to.' });
+        }
+
+        if (due_date !== undefined && !sameDueDate(due_date, existing.due_date)) {
+          return res.status(403).json({ message: 'You can only reschedule tasks you are assigned to.' });
+        }
+
+        if (assignee_ids !== undefined) {
+          const currentRows = await pool.query(
+            'SELECT user_id FROM task_assignees WHERE task_id = $1',
+            [req.params.id]
+          );
+          const currentIds = currentRows.rows.map((r) => r.user_id);
+          if (!sameIdSet(currentIds, assignee_ids)) {
+            return res.status(403).json({
+              message: 'You can only assign a task to yourself or others once a PM/admin has assigned you to it.',
+            });
+          }
+        }
       }
     }
 
@@ -502,6 +542,23 @@ async function bulkAssign(req, res) {
   }
 
   try {
+    // A member can only reassign tasks they're already assigned to.
+    if (req.user.role === 'member') {
+      const unowned = await pool.query(
+        `SELECT t.id FROM tasks t
+         WHERE t.id = ANY($1::uuid[])
+           AND NOT EXISTS (
+             SELECT 1 FROM task_assignees ta WHERE ta.task_id = t.id AND ta.user_id = $2
+           )`,
+        [taskIds, req.user.id]
+      );
+      if (unowned.rows.length > 0) {
+        return res.status(403).json({
+          message: 'You can only change assignees on tasks you are already assigned to.',
+        });
+      }
+    }
+
     if (!assignee_id) {
       await pool.query(`DELETE FROM task_assignees WHERE task_id = ANY($1::uuid[])`, [taskIds]);
     } else {

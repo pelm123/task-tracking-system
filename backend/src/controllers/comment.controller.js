@@ -39,6 +39,18 @@ async function createComment(req, res) {
     }
     const task = taskCheck.rows[0];
 
+    // A member who isn't assigned to this task can't comment on it.
+    // PM/admin can comment on anything.
+    if (req.user.role === 'member') {
+      const assignedCheck = await pool.query(
+        'SELECT 1 FROM task_assignees WHERE task_id = $1 AND user_id = $2',
+        [req.params.taskId, req.user.id]
+      );
+      if (assignedCheck.rows.length === 0) {
+        return res.status(403).json({ message: 'You can only comment on tasks you are assigned to.' });
+      }
+    }
+
     const result = await pool.query(
       `INSERT INTO comments (task_id, user_id, content)
        VALUES ($1, $2, $3)
