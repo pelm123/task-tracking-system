@@ -60,6 +60,24 @@ export function toTimeInputValue(dueDate) {
   return `${hour}:${minute}`;
 }
 
+// A task counts as overdue when it has a due date that's already passed and
+// it isn't Done yet — finished work is never "late", even if it was finished
+// after the deadline.
+export function isOverdue(dueDate, status, now = new Date()) {
+  if (!dueDate || status === 'done') return false;
+  return new Date(dueDate).getTime() < now.getTime();
+}
+
+// Compact "how late" for badges: just the biggest unit — "3d", "5h", "20m".
+export function formatOverdueShort(dueDate, now = new Date()) {
+  const mins = Math.max(1, Math.floor((now.getTime() - new Date(dueDate).getTime()) / 60000));
+  const days = Math.floor(mins / 1440);
+  if (days > 0) return `${days}d`;
+  const hours = Math.floor(mins / 60);
+  if (hours > 0) return `${hours}h`;
+  return `${mins}m`;
+}
+
 // Returns { label, overdue, urgent } describing how far `dueDate` is from
 // `now` (defaults to the current time). `urgent` is true inside the last
 // 24 hours before the deadline, for a bit of extra visual warning.

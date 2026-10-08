@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Droppable } from '@hello-pangea/dnd';
 import TaskCard from './TaskCard';
+import { isOverdue } from '../utils/dueDate';
 import styles from '../pages/board.module.css';
 
 const STATUS_COLORS = {
@@ -26,6 +27,7 @@ export default function KanbanColumn({
   now,
 }) {
   const [draft, setDraft] = useState('');
+  const overdueCount = tasks.filter((t) => isOverdue(t.due_date, t.status, now)).length;
 
   // Done is reached only through PM/admin approval of a Review task, so a
   // member can't drag into it or quick-add straight into it.
@@ -46,7 +48,10 @@ export default function KanbanColumn({
           <span className={styles.dot} style={{ background: STATUS_COLORS[status] }} />
           {label}
         </div>
-        <span className={styles.count}>{tasks.length}</span>
+        <span className={styles.columnHeaderRight}>
+          {overdueCount > 0 && <span className={styles.overdueCount}>⚠ {overdueCount} overdue</span>}
+          <span className={styles.count}>{tasks.length}</span>
+        </span>
       </div>
 
       <Droppable droppableId={status} isDropDisabled={doneLockedForUser}>

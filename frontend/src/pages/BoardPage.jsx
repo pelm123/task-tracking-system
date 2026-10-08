@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import * as tasksApi from '../api/tasks';
 import * as usersApi from '../api/users';
 import socket from '../api/socket';
+import { isOverdue } from '../utils/dueDate';
 import KanbanColumn from '../components/KanbanColumn';
 import NewTaskModal from '../components/NewTaskModal';
 import TaskDetailModal from '../components/TaskDetailModal';
@@ -39,6 +40,10 @@ export default function BoardPage() {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
   const [view, setView] = useState('board'); // 'board' | 'list'
+  // Optional: float overdue tasks to the top of each column. On by default,
+  // remembered per browser. (Card order within a column isn't saved anywhere
+  // — dragging only changes the status — so this doesn't fight manual ordering.)
+  const [overdueFirst, setOverdueFirst] = useState(() => localStorage.getItem('boardOverdueFirst') !== 'false');
 
   const [showNewTaskModal, setShowNewTaskModal] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
@@ -227,6 +232,27 @@ export default function BoardPage() {
     return true;
   });
 
+  const overdueTotal = filteredTasks.filter((t) => isOverdue(t.due_date, t.status, now)).length;
+
+  // Overdue first, most overdue (earliest due date) at the very top; every
+  // other task keeps its existing order (Array.sort is stable).
+  const sortedTasks = overdueFirst
+    ? [...filteredTasks].sort((a, b) => {
+        const aLate = isOverdue(a.due_date, a.status, now);
+        const bLate = isOverdue(b.due_date, b.status, now);
+        if (aLate && bLate) return new Date(a.due_date) - new Date(b.due_date);
+        if (aLate) return -1;
+        if (bLate) return 1;
+        return 0;
+      })
+    : filteredTasks;
+
+  function toggleOverdueFirst() {
+    const next = !overdueFirst;
+    setOverdueFirst(next);
+    localStorage.setItem('boardOverdueFirst', next ? 'true' : 'false');
+  }
+
   function toggleSelect(taskId) {
     setSelectedIds((prev) =>
       prev.includes(taskId) ? prev.filter((id) => id !== taskId) : [...prev, taskId]
@@ -334,6 +360,13 @@ export default function BoardPage() {
           <option value="medium">Medium</option>
           <option value="high">High</option>
         </select>
+        <button
+          className={`btn ${overdueFirst ? 'btn-active' : 'btn-secondary'}`}
+          onClick={toggleOverdueFirst}
+          title="Show overdue tasks at the top of each column"
+        >
+          ⚠ Overdue first{overdueTotal > 0 ? ` (${overdueTotal})` : ''}
+        </button>
         {(searchQuery || filterAssignee || filterPriority) && (
           <button
             className="btn btn-ghost"
@@ -405,7 +438,7 @@ export default function BoardPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredTasks.map((t) => (
+              {sortedTasks.map((t) => (
                 <tr key={t.id} onClick={() => setSelectedTask(t)} style={{ cursor: 'pointer' }}>
                   <td>{t.title}</td>
                   <td>
@@ -438,7 +471,7 @@ export default function BoardPage() {
                 key={col.status}
                 status={col.status}
                 label={col.label}
-                tasks={filteredTasks.filter((t) => t.status === col.status)}
+                tasks={sortedTasks.filter((t) => t.status === col.status)}
                 onTaskClick={setSelectedTask}
                 onQuickAdd={handleQuickAdd}
                 selectMode={selectMode}
