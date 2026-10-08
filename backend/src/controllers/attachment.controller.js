@@ -20,6 +20,30 @@ async function listAttachments(req, res) {
   }
 }
 
+// Browsers send multipart filenames as UTF-8, but multer/busboy decodes the
+// field as Latin-1 by default, so any non-ASCII name (Thai, emoji, accents,
+// ...) comes out mangled — "à¸£à¸°à¸..." instead of "ระบบ...". Re-decoding the
+// bytes as UTF-8 recovers the original text.
+function fixFilenameEncoding(name) {
+  return Buffer.from(name, 'latin1').toString('utf8');
+}
+
+// HTTP header VALUES are only allowed to contain Latin-1/ASCII bytes — Node
+// throws ("Invalid character in header content") if you hand setHeader a
+// raw Thai (or any non-Latin-1) filename. This is what broke preview/
+// download right after the filename-encoding fix above started storing the
+// real Thai text instead of mojibake (which, being made of accented Latin-1
+// characters, had accidentally been "valid" as a header value).
+//
+// The fix, per RFC 6266 / 5987: send an ASCII-only fallback in `filename=`
+// for older clients, plus the real UTF-8 name, percent-encoded, in
+// `filename*=`. Every modern browser uses the UTF-8 one.
+function contentDispositionHeader(disposition, fileName) {
+  const asciiFallback = fileName.replace(/[^\x20-\x7E]/g, '_');
+  const encoded = encodeURIComponent(fileName);
+  return `${disposition}; filename="${asciiFallback}"; filename*=UTF-8''${encoded}`;
+}
+
 // POST /tasks/:taskId/attachments  (multipart/form-data, field name "file")
 async function uploadAttachment(req, res) {
   if (!req.file) {
@@ -51,7 +75,14 @@ async function uploadAttachment(req, res) {
       `INSERT INTO attachments (task_id, uploaded_by, file_name, file_path, file_size, mime_type)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id, file_name, file_size, mime_type, created_at`,
-      [req.params.taskId, req.user.id, req.file.originalname, req.file.filename, req.file.size, req.file.mimetype]
+      [
+        req.params.taskId,
+        req.user.id,
+        fixFilenameEncoding(req.file.originalname),
+        req.file.filename,
+        req.file.size,
+        req.file.mimetype,
+      ]
     );
 
     res.status(201).json(result.rows[0]);
@@ -79,10 +110,48 @@ async function downloadAttachment(req, res) {
     }
 
     res.setHeader('Content-Type', mime_type || 'application/octet-stream');
-    res.setHeader('Content-Disposition', `attachment; filename="${file_name}"`);
+    res.setHeader('Content-Disposition', contentDispositionHeader('attachment', file_name));
     res.sendFile(fullPath);
   } catch (err) {
     console.error('Download attachment error:', err.message);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+// GET /attachments/:id/preview — like download, but only ever serves
+// images and PDFs, and sets Content-Disposition: inline so the browser
+// renders it directly instead of triggering a save-as. Anything else
+// (docs, spreadsheets, zips, etc.) isn't previewable, so this just 400s and
+// the frontend falls back to the regular download.
+function isPreviewable(mimeType) {
+  return Boolean(mimeType) && (mimeType.startsWith('image/') || mimeType === 'application/pdf');
+}
+
+async function previewAttachment(req, res) {
+  try {
+    const result = await pool.query(
+      'SELECT file_name, file_path, mime_type FROM attachments WHERE id = $1',
+      [req.params.id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Attachment not found' });
+    }
+    const { file_name, file_path, mime_type } = result.rows[0];
+
+    if (!isPreviewable(mime_type)) {
+      return res.status(400).json({ message: 'This file type cannot be previewed.' });
+    }
+
+    const fullPath = path.join(UPLOAD_DIR, file_path);
+    if (!fs.existsSync(fullPath)) {
+      return res.status(404).json({ message: 'File missing from disk' });
+    }
+
+    res.setHeader('Content-Type', mime_type);
+    res.setHeader('Content-Disposition', contentDispositionHeader('inline', file_name));
+    res.sendFile(fullPath);
+  } catch (err) {
+    console.error('Preview attachment error:', err.message);
     res.status(500).json({ message: 'Internal server error' });
   }
 }
@@ -137,4 +206,4 @@ async function deleteAttachment(req, res) {
   }
 }
 
-module.exports = { listAttachments, uploadAttachment, downloadAttachment, deleteAttachment };
+module.exports = { listAttachments, uploadAttachment, downloadAttachment, previewAttachment, deleteAttachment };

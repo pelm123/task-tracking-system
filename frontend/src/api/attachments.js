@@ -29,3 +29,18 @@ export async function downloadAttachment(id, fileName) {
 export function deleteAttachment(id) {
   return client.delete(`/attachments/${id}`);
 }
+
+// Mirrors the backend's previewAttachment check — only images and PDFs get
+// a preview option in the UI; everything else only offers Download.
+export function isPreviewable(mimeType) {
+  return Boolean(mimeType) && (mimeType.startsWith('image/') || mimeType === 'application/pdf');
+}
+
+// Fetches the file as a blob (so the request carries the same auth header
+// as everything else through `client`) and hands back an object URL to put
+// straight into an <img> or <iframe> src. Caller is responsible for
+// revoking it (window.URL.revokeObjectURL) once the preview is closed.
+export async function getPreviewUrl(id) {
+  const res = await client.get(`/attachments/${id}/preview`, { responseType: 'blob' });
+  return window.URL.createObjectURL(new Blob([res.data], { type: res.headers['content-type'] }));
+}
