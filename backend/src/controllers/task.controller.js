@@ -412,6 +412,15 @@ async function updateTaskStatus(req, res) {
     }
     const previousStatus = before.rows[0].status;
 
+    // A Done task can't just be dragged/moved back out — it has to go
+    // through the reopen flow (POST /tasks/:id/deny), which requires a
+    // comment explaining why and notifies the assignees.
+    if (previousStatus === 'done' && status !== 'done') {
+      return res.status(400).json({
+        message: 'A Done task has to be reopened with a comment explaining why. Use "Reopen" instead.',
+      });
+    }
+
     // A member can only move a task they're actually assigned to — not
     // someone else's. PM/admin can move anything.
     if (req.user.role === 'member') {
@@ -498,16 +507,17 @@ async function approveTask(req, res) {
   }
 }
 
-// POST /tasks/:id/deny — PM/admin only. Denies a task that's in Review,
-// sending it back to To Do. A comment explaining why is REQUIRED — it's
-// saved as a real comment on the task (so it shows up in the comment
+// POST /tasks/:id/deny — PM/admin only. Sends a task back to To Do, from
+// either Review (denying an approval request) or Done (reopening a task
+// that was already completed). A comment explaining why is REQUIRED —
+// it's saved as a real comment on the task (so it shows up in the comment
 // thread, same as any other comment) and also sent as a notification to
-// every assignee.
+// every assignee (in-app + LINE).
 async function denyTask(req, res) {
   const { reason } = req.body;
 
   if (!reason || !reason.trim()) {
-    return res.status(400).json({ message: 'A comment explaining why the task was denied is required.' });
+    return res.status(400).json({ message: 'A comment explaining why the task is being sent back is required.' });
   }
   const trimmedReason = reason.trim();
 
@@ -516,25 +526,34 @@ async function denyTask(req, res) {
     if (before.rows.length === 0) {
       return res.status(404).json({ message: 'Task not found' });
     }
-    if (before.rows[0].status !== 'review') {
-      return res.status(400).json({ message: 'Only a task currently in Review can be denied.' });
+    const previousStatus = before.rows[0].status;
+    if (previousStatus !== 'review' && previousStatus !== 'done') {
+      return res.status(400).json({ message: 'Only a task in Review or Done can be sent back to To Do.' });
     }
+    const isReopen = previousStatus === 'done';
 
-    await pool.query(`UPDATE tasks SET status = 'todo'::task_status WHERE id = $1`, [req.params.id]);
+    // completed_at is cleared too — a reopened task is no longer completed,
+    // so it drops out of the dashboard's "completed" counts.
+    await pool.query(
+      `UPDATE tasks SET status = 'todo'::task_status, completed_at = NULL WHERE id = $1`,
+      [req.params.id]
+    );
 
     // record the PM's reason as a real comment, so it's visible in the
     // task's comment thread, not just buried in a notification string
+    const commentPrefix = isReopen ? 'Reopened' : 'Approval denied';
     const commentResult = await pool.query(
       `INSERT INTO comments (task_id, user_id, content)
        VALUES ($1, $2, $3)
        RETURNING id, content, created_at, user_id`,
-      [req.params.id, req.user.id, `Approval denied — returned to To Do: ${trimmedReason}`]
+      [req.params.id, req.user.id, `${commentPrefix} — returned to To Do: ${trimmedReason}`]
     );
 
     const task = await getEnrichedTask(req.params.id);
 
     const actorName = await getUserName(req.user.id);
-    const message = `${actorName} returned "${task.title}" to To Do (approval denied) — "${trimmedReason}"`;
+    const reasonLabel = isReopen ? 'reopened' : 'approval denied';
+    const message = `${actorName} returned "${task.title}" to To Do (${reasonLabel}) — "${trimmedReason}"`;
     for (const assignee of task.assignees) {
       if (assignee.id === req.user.id) continue; // don't notify the actor
       await pool.query(
@@ -606,6 +625,20 @@ async function bulkUpdateStatus(req, res) {
       );
       if (unowned.rows.length > 0) {
         return res.status(403).json({ message: 'You can only move tasks you are assigned to.' });
+      }
+    }
+
+    // Done tasks can't be bulk-moved out — each one has to be reopened
+    // individually with a comment (POST /tasks/:id/deny).
+    if (status !== 'done') {
+      const doneInSelection = await pool.query(
+        `SELECT 1 FROM tasks WHERE id = ANY($1::uuid[]) AND status = 'done' LIMIT 1`,
+        [taskIds]
+      );
+      if (doneInSelection.rows.length > 0) {
+        return res.status(400).json({
+          message: 'Done tasks have to be reopened one at a time with a comment. Deselect them and try again.',
+        });
       }
     }
 

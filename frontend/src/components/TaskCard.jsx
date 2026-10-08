@@ -121,6 +121,13 @@ export default function TaskCard({
               </span>
             </div>
           )}
+          {canApprove && task.status === 'done' && (
+            <div className={styles.approvalActions} onClick={(e) => e.stopPropagation()}>
+              <button className={styles.denyBtn} onClick={() => onDeny(task.id)}>
+                ↩ Reopen
+              </button>
+            </div>
+          )}
           {showApprovalActions && (
             <div className={styles.approvalActions} onClick={(e) => e.stopPropagation()}>
               <button

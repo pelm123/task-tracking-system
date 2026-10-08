@@ -422,6 +422,11 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
               Delete
             </button>
           )}
+          {task.status === 'done' && canApprove && (
+            <button className={styles.btnDanger} onClick={() => onDeny(task.id)}>
+              Reopen — back to To Do
+            </button>
+          )}
           {task.status === 'review' && canApprove && (
             <>
               <button

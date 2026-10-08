@@ -111,6 +111,21 @@ export default function BoardPage() {
 
     const newStatus = destination.droppableId;
 
+    // A Done task can only leave Done through the reopen flow: PM/admin,
+    // back to To Do, with a required comment (the backend enforces this
+    // too). Nothing is moved optimistically here — the card just snaps
+    // back unless the reopen actually goes through.
+    if (source.droppableId === 'done' && newStatus !== 'done') {
+      if (!canApprove) {
+        setError('Only a PM or admin can reopen a Done task.');
+      } else if (newStatus !== 'todo') {
+        setError('A Done task can only be reopened to To Do, with a comment explaining why.');
+      } else {
+        handleDeny(draggableId);
+      }
+      return;
+    }
+
     // Members can't drag a card straight into Done — a PM/admin has to
     // approve it from Review first (see handleApprove below).
     if (newStatus === 'done' && !canApprove) {
@@ -152,14 +167,19 @@ export default function BoardPage() {
     }
   }
 
+  // Sends a task back to To Do — either denying a Review approval, or
+  // reopening a Done task. Both need a comment explaining why; the backend
+  // saves it as a real comment and notifies the assignees.
   async function handleDeny(taskId) {
-    // a comment explaining the denial is required — keep asking until the
-    // PM provides one or explicitly cancels (the backend enforces this too,
-    // this just avoids a round-trip for the common case)
-    let reason = window.prompt('Comment explaining why this task is denied (required):', '');
+    const isReopen = tasks.find((t) => t.id === taskId)?.status === 'done';
+    const verb = isReopen ? 'reopen' : 'deny';
+
+    // keep asking until the PM provides a comment or explicitly cancels (the
+    // backend enforces this too, this just avoids a round-trip)
+    let reason = window.prompt(`Comment explaining why this task is being sent back to To Do (required):`, '');
     if (reason === null) return; // user cancelled the prompt
     while (!reason.trim()) {
-      reason = window.prompt('A comment is required to deny a task. Please explain what needs to change:', '');
+      reason = window.prompt(`A comment is required to ${verb} a task. Please explain what needs to change:`, '');
       if (reason === null) return;
     }
     try {
@@ -167,7 +187,7 @@ export default function BoardPage() {
       setTasks((prev) => prev.map((t) => (t.id === taskId ? updated : t)));
       setSelectedTask((prev) => (prev && prev.id === taskId ? updated : prev));
     } catch (err) {
-      setError(err.response?.data?.message || 'Could not deny that task.');
+      setError(err.response?.data?.message || `Could not ${verb} that task.`);
     }
   }
 
