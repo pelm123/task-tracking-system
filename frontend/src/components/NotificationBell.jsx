@@ -1,5 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import * as notificationsApi from '../api/notifications';
+import {
+  initNotificationSound,
+  isSoundEnabled,
+  setSoundEnabled,
+  playNotificationSound,
+  pickMostImportantType,
+} from '../utils/notificationSound';
 import styles from './notificationBell.module.css';
 
 const POLL_INTERVAL_MS = 30000;
@@ -17,11 +24,39 @@ function timeAgo(dateStr) {
 export default function NotificationBell() {
   const [notifications, setNotifications] = useState([]);
   const [open, setOpen] = useState(false);
+  const [soundOn, setSoundOn] = useState(isSoundEnabled);
   const wrapRef = useRef(null);
+  // ids we've already seen, so only genuinely NEW notifications make a sound.
+  // null until the first load finishes — the initial fetch (page open /
+  // refresh) shouldn't chime for everything that was already waiting.
+  const seenIdsRef = useRef(null);
 
   const load = useCallback(() => {
-    notificationsApi.listNotifications().then(setNotifications).catch(() => {});
+    notificationsApi
+      .listNotifications()
+      .then((list) => {
+        if (seenIdsRef.current) {
+          const fresh = list.filter((n) => !n.is_read && !seenIdsRef.current.has(n.id));
+          if (fresh.length > 0) {
+            playNotificationSound(pickMostImportantType(fresh.map((n) => n.type)));
+          }
+        }
+        seenIdsRef.current = new Set(list.map((n) => n.id));
+        setNotifications(list);
+      })
+      .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    initNotificationSound();
+  }, []);
+
+  function toggleSound() {
+    const next = !soundOn;
+    setSoundOn(next);
+    setSoundEnabled(next);
+    if (next) playNotificationSound('assigned'); // preview, so you know it works
+  }
 
   useEffect(() => {
     load();
@@ -74,11 +109,21 @@ export default function NotificationBell() {
         <div className={styles.dropdown}>
           <div className={styles.dropdownHeader}>
             <span className={styles.dropdownTitle}>Notifications</span>
-            {unreadCount > 0 && (
-              <button className={styles.markAllBtn} onClick={handleMarkAllRead}>
-                Mark all read
+            <span className={styles.headerActions}>
+              {unreadCount > 0 && (
+                <button className={styles.markAllBtn} onClick={handleMarkAllRead}>
+                  Mark all read
+                </button>
+              )}
+              <button
+                className={styles.soundBtn}
+                onClick={toggleSound}
+                title={soundOn ? 'Sound on — click to mute' : 'Sound off — click to turn on'}
+                aria-label={soundOn ? 'Mute notification sounds' : 'Turn on notification sounds'}
+              >
+                {soundOn ? '🔊' : '🔇'}
               </button>
-            )}
+            </span>
           </div>
 
           {notifications.length === 0 ? (
