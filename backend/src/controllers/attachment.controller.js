@@ -27,15 +27,16 @@ async function uploadAttachment(req, res) {
   }
 
   try {
-    const taskCheck = await pool.query('SELECT id FROM tasks WHERE id = $1', [req.params.taskId]);
+    const taskCheck = await pool.query('SELECT id, created_by FROM tasks WHERE id = $1', [req.params.taskId]);
     if (taskCheck.rows.length === 0) {
       fs.unlinkSync(req.file.path); // clean up orphaned upload
       return res.status(404).json({ message: 'Task not found' });
     }
 
-    // A member who isn't assigned to this task can't upload files to it.
-    // PM/admin can upload to anything.
-    if (req.user.role === 'member') {
+    // A member who isn't assigned to this task AND didn't create it can't
+    // upload files to it. The task's own creator can always upload, even
+    // before anyone is assigned. PM/admin can upload to anything.
+    if (req.user.role === 'member' && taskCheck.rows[0].created_by !== req.user.id) {
       const assignedCheck = await pool.query(
         'SELECT 1 FROM task_assignees WHERE task_id = $1 AND user_id = $2',
         [req.params.taskId, req.user.id]
@@ -87,17 +88,46 @@ async function downloadAttachment(req, res) {
 }
 
 // DELETE /attachments/:id
+// Who can delete a file: admin/pm (any attachment), the person who
+// uploaded it (their own upload, regardless of assignment), or anyone
+// assigned to / who created the task it's attached to. A member with none
+// of those is blocked — mirrors the same assigned-or-creator pattern used
+// for editing a task, commenting, and uploading in the first place.
 async function deleteAttachment(req, res) {
   try {
-    const result = await pool.query(
-      'DELETE FROM attachments WHERE id = $1 RETURNING file_path',
+    const existing = await pool.query(
+      `SELECT a.file_path, a.task_id, a.uploaded_by, t.created_by
+       FROM attachments a
+       JOIN tasks t ON t.id = a.task_id
+       WHERE a.id = $1`,
       [req.params.id]
     );
-    if (result.rows.length === 0) {
+    if (existing.rows.length === 0) {
       return res.status(404).json({ message: 'Attachment not found' });
     }
+    const { file_path, task_id, uploaded_by, created_by } = existing.rows[0];
 
-    const fullPath = path.join(UPLOAD_DIR, result.rows[0].file_path);
+    if (req.user.role === 'member') {
+      const isUploader = uploaded_by === req.user.id;
+      const isTaskCreator = created_by === req.user.id;
+      let isAssignee = false;
+      if (!isUploader && !isTaskCreator) {
+        const assignedCheck = await pool.query(
+          'SELECT 1 FROM task_assignees WHERE task_id = $1 AND user_id = $2',
+          [task_id, req.user.id]
+        );
+        isAssignee = assignedCheck.rows.length > 0;
+      }
+      if (!isUploader && !isTaskCreator && !isAssignee) {
+        return res.status(403).json({
+          message: 'You can only delete files you uploaded, or files on tasks you are assigned to.',
+        });
+      }
+    }
+
+    await pool.query('DELETE FROM attachments WHERE id = $1', [req.params.id]);
+
+    const fullPath = path.join(UPLOAD_DIR, file_path);
     if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
 
     res.status(204).send();

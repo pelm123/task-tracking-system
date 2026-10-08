@@ -257,7 +257,7 @@ async function updateTask(req, res) {
 
   try {
     const before = await pool.query(
-      'SELECT id, title, description, priority, due_date, reminder_hours_before FROM tasks WHERE id = $1',
+      'SELECT id, title, description, priority, due_date, reminder_hours_before, created_by FROM tasks WHERE id = $1',
       [req.params.id]
     );
     if (before.rows.length === 0) {
@@ -265,14 +265,19 @@ async function updateTask(req, res) {
     }
     const existing = before.rows[0];
 
-    // A member who isn't assigned to this task can only view it, not edit
-    // any part of it — title, description, priority, due date, reminder
-    // lead time, or who's assigned. PM/admin aren't restricted. Each check
-    // only fires when that field is actually changing, so saving a no-op
-    // form never 403s.
+    // A member who isn't assigned to this task AND didn't create it can
+    // only view it, not edit any part of it — title, description, priority,
+    // due date, reminder lead time, or who's assigned. The task's own
+    // creator can always edit it, even before anyone (including themself)
+    // is assigned — otherwise a member who creates a task without
+    // assigning themselves would be instantly locked out of their own
+    // task. PM/admin aren't restricted either way. Each check only fires
+    // when that field is actually changing, so saving a no-op form never
+    // 403s.
     if (req.user.role === 'member') {
       const currentlyAssigned = await isAssignedToTask(req.params.id, req.user.id);
-      if (!currentlyAssigned) {
+      const isCreator = existing.created_by === req.user.id;
+      if (!currentlyAssigned && !isCreator) {
         const changingCore =
           (title !== undefined && title !== existing.title) ||
           (description !== undefined && description !== (existing.description || '')) ||

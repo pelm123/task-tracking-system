@@ -33,15 +33,16 @@ async function createComment(req, res) {
   }
 
   try {
-    const taskCheck = await pool.query('SELECT id, title FROM tasks WHERE id = $1', [req.params.taskId]);
+    const taskCheck = await pool.query('SELECT id, title, created_by FROM tasks WHERE id = $1', [req.params.taskId]);
     if (taskCheck.rows.length === 0) {
       return res.status(404).json({ message: 'Task not found' });
     }
     const task = taskCheck.rows[0];
 
-    // A member who isn't assigned to this task can't comment on it.
-    // PM/admin can comment on anything.
-    if (req.user.role === 'member') {
+    // A member who isn't assigned to this task AND didn't create it can't
+    // comment on it. The task's own creator can always comment, even
+    // before anyone is assigned. PM/admin can comment on anything.
+    if (req.user.role === 'member' && task.created_by !== req.user.id) {
       const assignedCheck = await pool.query(
         'SELECT 1 FROM task_assignees WHERE task_id = $1 AND user_id = $2',
         [req.params.taskId, req.user.id]

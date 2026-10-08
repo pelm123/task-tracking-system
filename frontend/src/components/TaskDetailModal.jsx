@@ -47,12 +47,17 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
   // else's. PM/admin can reschedule any task. Mirrors the backend check in
   // updateTask.
   const isAssignee = (task.assignees || []).some((a) => a.id === currentUser.id);
-  const canReschedule = currentUser.role !== 'member' || isAssignee;
-  // A member who isn't assigned to this task yet can't assign it (to
-  // themselves or anyone else), comment on it, or upload files to it —
-  // only a PM/admin assigning them changes that. Mirrors the backend
-  // checks in updateTask/createComment/uploadAttachment.
-  const isUnassignedMember = currentUser.role === 'member' && !isAssignee;
+  // The task's own creator can always edit/comment/upload on it, even
+  // before anyone (including themselves) is assigned — otherwise a member
+  // who creates a task without assigning themselves would be instantly
+  // locked out of their own task. Mirrors the backend checks.
+  const isCreator = task.created_by === currentUser.id;
+  const canReschedule = currentUser.role !== 'member' || isAssignee || isCreator;
+  // A member who isn't assigned to this task yet, and didn't create it,
+  // can't assign it (to themselves or anyone else), comment on it, or
+  // upload files to it — only a PM/admin assigning them changes that.
+  // Mirrors the backend checks in updateTask/createComment/uploadAttachment.
+  const isUnassignedMember = currentUser.role === 'member' && !isAssignee && !isCreator;
   // admin/pm can delete any task; a member can delete only a task they
   // created themselves — mirrors the backend check in deleteTask
   const canDelete = canApprove || task.created_by === currentUser.id;
@@ -73,17 +78,35 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef(null);
 
+  // Only (re)load comments/attachments when switching to a different task —
+  // NOT on every task.updated_at change. That used to also be a dependency
+  // here so a PM's denial comment would show up live, but task.updated_at
+  // changes on ANY edit to the task (status, approve/deny, title, priority,
+  // due date, reminder — by anyone, from real-time sync), which with
+  // several people testing the same task fires constantly. Each firing
+  // replaced the entire `comments` array wholesale, which could land
+  // mid-edit and leave an open "edit comment" box pointing at a comment
+  // object that had just been swapped out from under it — Save would then
+  // silently no-op. The denial comment is now merged in separately below
+  // instead of forcing a full refetch.
   useEffect(() => {
     commentsApi
       .listComments(task.id)
       .then(setComments)
       .finally(() => setLoadingComments(false));
     attachmentsApi.listAttachments(task.id).then(setAttachments);
-    // task.updated_at changes whenever the task is approved/denied/edited
-    // elsewhere (e.g. the real-time sync from another tab) — re-pull
-    // comments then too, so a PM's required denial comment shows up here
-    // without the person having to close and reopen the task.
-  }, [task.id, task.updated_at]);
+  }, [task.id]);
+
+  // denyTask's response carries the required denial comment it just
+  // created — merge it straight into the local list (once) instead of
+  // refetching the whole comments array, so it shows up live without the
+  // disruptive full-replacement behavior described above.
+  useEffect(() => {
+    if (!task.denialComment) return;
+    setComments((prev) =>
+      prev.some((c) => c.id === task.denialComment.id) ? prev : [...prev, task.denialComment]
+    );
+  }, [task.denialComment]);
 
   async function handleSave() {
     setSaving(true);
@@ -186,6 +209,23 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
       await attachmentsApi.downloadAttachment(att.id, att.file_name);
     } catch (err) {
       setError('Could not download file');
+    }
+  }
+
+  // Mirrors the backend rule in deleteAttachment: admin/pm can delete any
+  // file; a member can delete a file they uploaded themselves, or any file
+  // on a task they're assigned to or created.
+  function canDeleteAttachment(att) {
+    return canApprove || isCreator || isAssignee || att.uploaded_by === currentUser.id;
+  }
+
+  async function handleDeleteAttachment(att) {
+    if (!window.confirm(`Delete "${att.file_name}"? This cannot be undone.`)) return;
+    try {
+      await attachmentsApi.deleteAttachment(att.id);
+      setAttachments((prev) => prev.filter((a) => a.id !== att.id));
+    } catch (err) {
+      setError(err.response?.data?.message || 'Could not delete file');
     }
   }
 
@@ -459,8 +499,18 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
                   <button className={styles.attachmentName} onClick={() => handleDownload(a)}>
                     {a.file_name}
                   </button>
-                  <span style={{ color: 'var(--color-text-muted)' }}>
-                    {(a.file_size / 1024).toFixed(0)} KB
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ color: 'var(--color-text-muted)' }}>
+                      {(a.file_size / 1024).toFixed(0)} KB
+                    </span>
+                    {canDeleteAttachment(a) && (
+                      <button
+                        onClick={() => handleDeleteAttachment(a)}
+                        style={{ background: 'none', border: 'none', color: 'var(--priority-high)', cursor: 'pointer', fontSize: 12, padding: 0 }}
+                      >
+                        Delete
+                      </button>
+                    )}
                   </span>
                 </div>
               ))}
