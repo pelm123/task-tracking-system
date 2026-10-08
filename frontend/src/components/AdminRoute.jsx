@@ -9,7 +9,7 @@ export default function AdminRoute({ children }) {
     return <Navigate to="/login" replace />;
   }
   if (!['admin', 'pm'].includes(user.role)) {
-    return <Navigate to="/board" replace />;
+    return <Navigate to="/home" replace />;
   }
   return children;
 }

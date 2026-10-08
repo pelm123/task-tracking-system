@@ -1,5 +1,5 @@
 import { Draggable } from '@hello-pangea/dnd';
-import { getDueCountdown } from '../utils/dueDate';
+import { getDueCountdown, isOverdue, formatOverdueShort } from '../utils/dueDate';
 import styles from '../pages/board.module.css';
 
 const PRIORITY_COLORS = {
@@ -23,6 +23,8 @@ export default function TaskCard({
 }) {
   const showApprovalActions = canApprove && task.status === 'review';
   const countdown = getDueCountdown(task.due_date, now);
+  // Done tasks are never flagged as late, even if they finished past the due date
+  const overdue = isOverdue(task.due_date, task.status, now);
 
   // A member can only move a task they're assigned to — not someone
   // else's (PM/admin can move anything). Mirrors the backend check in
@@ -37,7 +39,7 @@ export default function TaskCard({
           ref={provided.innerRef}
           {...provided.draggableProps}
           {...provided.dragHandleProps}
-          className={`${styles.card} ${snapshot.isDragging ? styles.dragging : ''}`}
+          className={`${styles.card} ${snapshot.isDragging ? styles.dragging : ''} ${overdue ? styles.cardOverdue : ''}`}
           style={{
             '--card-accent': PRIORITY_COLORS[task.priority],
             ...provided.draggableProps.style,
@@ -70,16 +72,20 @@ export default function TaskCard({
             >
               {task.priority}
             </span>
-            {countdown && (
+            {overdue && (
+              <span
+                className={styles.overdueBadge}
+                title={`${countdown.label} — due ${new Date(task.due_date).toLocaleString()}`}
+              >
+                Overdue · {formatOverdueShort(task.due_date, now)}
+              </span>
+            )}
+            {countdown && !overdue && (
               <span
                 className={styles.dueDate}
                 style={{
-                  color: countdown.overdue
-                    ? 'var(--priority-high)'
-                    : countdown.urgent
-                    ? 'var(--priority-medium)'
-                    : undefined,
-                  fontWeight: countdown.overdue || countdown.urgent ? 600 : undefined,
+                  color: countdown.urgent && task.status !== 'done' ? 'var(--priority-medium)' : undefined,
+                  fontWeight: countdown.urgent && task.status !== 'done' ? 600 : undefined,
                 }}
                 title={new Date(task.due_date).toLocaleString()}
               >
@@ -119,6 +125,13 @@ export default function TaskCard({
                   ? task.assignees[0].name
                   : `${task.assignees.length} assignees`}
               </span>
+            </div>
+          )}
+          {canApprove && task.status === 'done' && (
+            <div className={styles.approvalActions} onClick={(e) => e.stopPropagation()}>
+              <button className={styles.denyBtn} onClick={() => onDeny(task.id)}>
+                ↩ Reopen
+              </button>
             </div>
           )}
           {showApprovalActions && (

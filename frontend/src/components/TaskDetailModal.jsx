@@ -22,6 +22,8 @@ function timeAgo(dateStr) {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
+const MAX_UPLOAD_BYTES = 20 * 1024 * 1024; // keep in sync with backend middleware/upload.js
+
 export default function TaskDetailModal({ task, users, onClose, onUpdate, onDelete, canApprove, onApprove, onDeny }) {
   const { user: currentUser } = useAuth();
   const [title, setTitle] = useState(task.title);
@@ -76,6 +78,7 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
 
   const [attachments, setAttachments] = useState([]);
   const [uploading, setUploading] = useState(false);
+  const [pendingFile, setPendingFile] = useState(null); // chosen but not yet saved
   const [preview, setPreview] = useState(null); // { url, mimeType, name }
   const [previewLoading, setPreviewLoading] = useState(false);
   const fileInputRef = useRef(null);
@@ -105,6 +108,8 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
       .then(setComments)
       .finally(() => setLoadingComments(false));
     attachmentsApi.listAttachments(task.id).then(setAttachments);
+    setPendingFile(null); // a staged file belongs to the task it was chosen on
+    if (fileInputRef.current) fileInputRef.current.value = '';
   }, [task.id]);
 
   // denyTask's response carries the required denial comment it just
@@ -199,14 +204,33 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
     }
   }
 
-  async function handleFileSelect(e) {
+  // Choosing a file only stages it; nothing is uploaded until "Save".
+  function handleFileSelect(e) {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setError('That file is larger than 20 MB. Please choose a smaller one.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+    setError('');
+    setPendingFile(file);
+  }
+
+  function handleCancelUpload() {
+    setPendingFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }
+
+  async function handleSaveUpload() {
+    if (!pendingFile) return;
     setUploading(true);
     try {
-      const created = await attachmentsApi.uploadAttachment(task.id, file);
+      const created = await attachmentsApi.uploadAttachment(task.id, pendingFile);
       setAttachments((prev) => [created, ...prev]);
+      setPendingFile(null);
     } catch (err) {
+      // Keep the staged file so the user can retry or cancel.
       setError(err.response?.data?.message || 'Could not upload file');
     } finally {
       setUploading(false);
@@ -422,6 +446,11 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
               Delete
             </button>
           )}
+          {task.status === 'done' && canApprove && (
+            <button className={styles.btnDanger} onClick={() => onDeny(task.id)}>
+              Reopen — back to To Do
+            </button>
+          )}
           {task.status === 'review' && canApprove && (
             <>
               <button
@@ -572,8 +601,44 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
             </p>
           ) : (
             <>
-              <input type="file" ref={fileInputRef} onChange={handleFileSelect} disabled={uploading} />
-              {uploading && <p className={styles.emptyText}>Uploading…</p>}
+              {/* The native input stays mounted (hidden while a file is staged) so the ref keeps working */}
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileSelect}
+                disabled={uploading}
+                style={pendingFile ? { display: 'none' } : undefined}
+              />
+              {pendingFile && (
+                <div className={styles.pendingUpload}>
+                  <span className={styles.pendingIcon}>📎</span>
+                  <div className={styles.pendingInfo}>
+                    <span className={styles.pendingName} title={pendingFile.name}>{pendingFile.name}</span>
+                    <span className={styles.pendingSize}>
+                      {pendingFile.size >= 1024 * 1024
+                        ? `${(pendingFile.size / (1024 * 1024)).toFixed(1)} MB`
+                        : `${Math.max(1, Math.round(pendingFile.size / 1024))} KB`}
+                      {uploading ? ' · Uploading…' : ' · Not saved yet'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className={styles.pendingCancel}
+                    onClick={handleCancelUpload}
+                    disabled={uploading}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.pendingSave}
+                    onClick={handleSaveUpload}
+                    disabled={uploading}
+                  >
+                    {uploading ? 'Saving…' : 'Save'}
+                  </button>
+                </div>
+              )}
             </>
           )}
         </div>
