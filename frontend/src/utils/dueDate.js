@@ -16,18 +16,24 @@ export const REMINDER_PRESETS = [
 
 export const DEFAULT_REMINDER_HOURS = 24;
 
-// A <input type="date"> value ("YYYY-MM-DD") has no timezone of its own.
-// Sending it to the backend as-is gets parsed as UTC midnight, which for
-// any positive UTC offset (e.g. Bangkok, UTC+7) falls earlier that same
-// morning — so a task due "today" shows as already overdue the moment it's
-// created. Instead, treat the picked date as due by the END of that day in
-// the browser's own local timezone, and convert that instant to an ISO
-// string for the backend.
-export function dateInputToDueTimestamp(dateStr) {
+// Due dates now carry a specific time too, defaulting to the end of the
+// picked day when the person doesn't set one — this keeps old behavior
+// (due "by end of day") as the default while allowing an exact time.
+export const DEFAULT_DUE_TIME = '23:59';
+
+// Combines a <input type="date"> value ("YYYY-MM-DD") and a
+// <input type="time"> value ("HH:mm") into an ISO timestamp, treating both
+// as the browser's own local timezone before converting. Sending a bare
+// date to the backend used to get parsed as UTC midnight, which for any
+// positive UTC offset (e.g. Bangkok, UTC+7) falls earlier that same
+// morning — so a task due "today" looked already overdue the moment it was
+// created. Always resolving a local date+time first avoids that.
+export function dateInputToDueTimestamp(dateStr, timeStr) {
   if (!dateStr) return null;
   const [year, month, day] = dateStr.split('-').map(Number);
-  const localEndOfDay = new Date(year, month - 1, day, 23, 59, 59, 999);
-  return localEndOfDay.toISOString();
+  const [hour, minute] = (timeStr || DEFAULT_DUE_TIME).split(':').map(Number);
+  const local = new Date(year, month - 1, day, hour, minute, 0, 0);
+  return local.toISOString();
 }
 
 // The inverse: given a due_date timestamp from the backend, return the
@@ -42,6 +48,16 @@ export function toDateInputValue(dueDate) {
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+// Same idea for the <input type="time">'s "HH:mm" value, read from local
+// time parts.
+export function toTimeInputValue(dueDate) {
+  if (!dueDate) return DEFAULT_DUE_TIME;
+  const d = new Date(dueDate);
+  const hour = String(d.getHours()).padStart(2, '0');
+  const minute = String(d.getMinutes()).padStart(2, '0');
+  return `${hour}:${minute}`;
 }
 
 // Returns { label, overdue, urgent } describing how far `dueDate` is from

@@ -7,6 +7,7 @@ import {
   DEFAULT_REMINDER_HOURS,
   getDueCountdown,
   toDateInputValue,
+  toTimeInputValue,
   dateInputToDueTimestamp,
 } from '../utils/dueDate';
 import styles from './modal.module.css';
@@ -27,6 +28,7 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
   const [description, setDescription] = useState(task.description || '');
   const [priority, setPriority] = useState(task.priority);
   const [dueDate, setDueDate] = useState(toDateInputValue(task.due_date));
+  const [dueTime, setDueTime] = useState(toTimeInputValue(task.due_date));
   const [reminderHours, setReminderHours] = useState(task.reminder_hours_before ?? DEFAULT_REMINDER_HOURS);
   const [assigneeIds, setAssigneeIds] = useState((task.assignees || []).map((a) => a.id));
   const [saving, setSaving] = useState(false);
@@ -98,7 +100,7 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
         // to make one — a disabled input never changes, but this keeps the
         // request honest even if that ever stops being true
         due_date: canReschedule
-          ? (dueDate ? dateInputToDueTimestamp(dueDate) : null)
+          ? (dueDate ? dateInputToDueTimestamp(dueDate, dueTime) : null)
           : task.due_date || null,
         // same permission as the due date itself — only someone who can
         // reschedule the task can change how far ahead it warns them
@@ -270,6 +272,20 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
               </p>
             )}
           </div>
+
+          {dueDate && (
+            <div className={styles.field}>
+              <label htmlFor="dDueTime">Due time</label>
+              <input
+                id="dDueTime"
+                type="time"
+                value={dueTime}
+                onChange={(e) => setDueTime(e.target.value)}
+                disabled={!canReschedule}
+                title={canReschedule ? undefined : 'Only assigned members can reschedule this task'}
+              />
+            </div>
+          )}
 
           {dueDate && (
             <div className={styles.field}>

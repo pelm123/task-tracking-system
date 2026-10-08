@@ -1,6 +1,6 @@
 const express = require('express');
 const { authenticate } = require('../middleware/auth');
-const { getLinkCode, unlink } = require('../controllers/line.controller');
+const { getLinkCode, unlink, getPreferences, updatePreferences } = require('../controllers/line.controller');
 
 const router = express.Router();
 
@@ -11,5 +11,7 @@ const router = express.Router();
 
 router.get('/link-code', authenticate, getLinkCode);
 router.delete('/link', authenticate, unlink);
+router.get('/preferences', authenticate, getPreferences);
+router.patch('/preferences', authenticate, updatePreferences);
 
 module.exports = router;

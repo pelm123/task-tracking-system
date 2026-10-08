@@ -38,11 +38,15 @@ async function getUserName(userId) {
 
 function formatDueDate(dueDate) {
   if (!dueDate) return 'no due date';
+  // Pin to Bangkok time — without an explicit timeZone this renders in the
+  // SERVER's local time (often UTC), which made a 6:00 PM due date show up
+  // in notifications as 11:00 AM. See dueDateCheck.js for the same fix.
   return new Date(dueDate).toLocaleString('en-US', {
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
+    timeZone: 'Asia/Bangkok',
   });
 }
 
@@ -86,7 +90,7 @@ async function notifyAssignees(task, userIds, actorId) {
     } catch (err) {
       console.error('notifyAssignees error:', err.message);
     }
-    notifyLineIfLinked(userId, `📋 ${message}`);
+    notifyLineIfLinked(userId, `📋 ${message}`, 'assigned');
   }
 }
 
@@ -305,6 +309,28 @@ async function updateTask(req, res) {
       }
     }
 
+    // Build a plain-language summary of what's actually changing, compared
+    // against the row as it was before this PATCH — used below to notify
+    // the task's assignees that it was edited. Assignee-set changes aren't
+    // included here since those are already covered by the "assigned"
+    // notification for anyone newly added.
+    const changedFields = [];
+    if (title !== undefined && title !== existing.title) {
+      changedFields.push(`title → "${title}"`);
+    }
+    if (description !== undefined && description !== (existing.description || '')) {
+      changedFields.push('description updated');
+    }
+    if (priority !== undefined && priority !== existing.priority) {
+      changedFields.push(`priority → ${priority}`);
+    }
+    if (due_date !== undefined && !sameDueDate(due_date, existing.due_date)) {
+      changedFields.push(`due date → ${formatDueDate(due_date)}`);
+    }
+    if (reminder_hours_before !== undefined && reminder_hours_before !== existing.reminder_hours_before) {
+      changedFields.push('reminder time updated');
+    }
+
     await pool.query(
       `UPDATE tasks SET
          title = COALESCE($1, title),
@@ -329,6 +355,26 @@ async function updateTask(req, res) {
     if (newlyAssigned.length > 0) {
       await notifyAssignees(task, newlyAssigned, req.user.id);
     }
+
+    // Every other field edit gets an in-app notification to the task's
+    // other assignees — but intentionally NOT a LINE push (no
+    // notifyLineIfLinked call here). Newly-assigned people already got
+    // their own "assigned" notification above, so they're skipped here to
+    // avoid a duplicate ping for the same save.
+    if (changedFields.length > 0) {
+      const actorName = await getUserName(req.user.id);
+      const message = `${actorName} updated "${task.title}" (${changedFields.join(', ')})`;
+      const newlyAssignedSet = new Set(newlyAssigned);
+      for (const assignee of task.assignees) {
+        if (assignee.id === req.user.id || newlyAssignedSet.has(assignee.id)) continue;
+        await pool.query(
+          `INSERT INTO notifications (user_id, task_id, type, message)
+           VALUES ($1, $2, 'task_updated', $3)`,
+          [assignee.id, task.id, message]
+        );
+      }
+    }
+
     broadcastTask(req, task.project_id, 'task:upserted', task);
 
     res.json(task);
@@ -387,7 +433,7 @@ async function updateTaskStatus(req, res) {
            VALUES ($1, $2, 'status_change', $3)`,
           [assignee.id, task.id, message]
         );
-        notifyLineIfLinked(assignee.id, `🔄 ${message}`);
+        notifyLineIfLinked(assignee.id, `🔄 ${message}`, 'status_change');
       }
     }
     broadcastTask(req, task.project_id, 'task:upserted', task);
@@ -424,7 +470,7 @@ async function approveTask(req, res) {
          VALUES ($1, $2, 'approved', $3)`,
         [assignee.id, task.id, message]
       );
-      notifyLineIfLinked(assignee.id, `✅ ${message}`);
+      notifyLineIfLinked(assignee.id, `✅ ${message}`, 'approved');
     }
 
     broadcastTask(req, task.project_id, 'task:upserted', task);
@@ -479,7 +525,7 @@ async function denyTask(req, res) {
          VALUES ($1, $2, 'approval_denied', $3)`,
         [assignee.id, task.id, message]
       );
-      notifyLineIfLinked(assignee.id, `↩️ ${message}`);
+      notifyLineIfLinked(assignee.id, `↩️ ${message}`, 'approval_denied');
     }
 
     broadcastTask(req, task.project_id, 'task:upserted', task);

@@ -117,3 +117,23 @@
   color: var(--color-text-muted);
   line-height: 1.6;
 }
+
+.prefList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.prefRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.prefRow input {
+  width: auto;
+  flex-shrink: 0;
+}

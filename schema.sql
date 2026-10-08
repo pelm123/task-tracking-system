@@ -8,7 +8,10 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto"; -- for gen_random_uuid()
 CREATE TYPE user_role AS ENUM ('admin', 'pm', 'member');
 CREATE TYPE task_status AS ENUM ('todo', 'in_progress', 'review', 'done');
 CREATE TYPE task_priority AS ENUM ('low', 'medium', 'high');
-CREATE TYPE notification_type AS ENUM ('due_soon', 'assigned', 'comment', 'status_change', 'approved', 'approval_denied');
+-- 'task_updated' (general edits: title/description/priority/due date/
+-- reminder) is deliberately left out of line_notification_prefs below —
+-- it's in-app only and never pushed to LINE.
+CREATE TYPE notification_type AS ENUM ('due_soon', 'assigned', 'comment', 'status_change', 'approved', 'approval_denied', 'task_updated');
 
 -- ── Users ───────────────────────────────────────────────────
 CREATE TABLE users (
@@ -17,6 +20,12 @@ CREATE TABLE users (
     email         VARCHAR(255) NOT NULL UNIQUE,
     password_hash VARCHAR(255) NOT NULL,
     role          user_role NOT NULL DEFAULT 'member',
+    line_user_id  VARCHAR(64) UNIQUE,
+    line_link_code VARCHAR(10) UNIQUE,
+    -- which notification_type values push to LINE once an account is
+    -- linked; all on by default (see ProfilePage's "LINE notifications")
+    line_notification_prefs JSONB NOT NULL DEFAULT
+      '{"assigned": true, "status_change": true, "comment": true, "due_soon": true, "approved": true, "approval_denied": true}'::jsonb,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

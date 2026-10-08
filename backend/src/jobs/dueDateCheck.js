@@ -3,11 +3,16 @@ const pool = require('../config/db');
 const { notifyLineIfLinked } = require('../config/line');
 
 function formatDueDate(dueDate) {
+  // Without an explicit timeZone, toLocaleString renders in the SERVER's
+  // local time (often UTC), not the user's — so a 6:00 PM Bangkok due date
+  // showed up in the LINE message as 11:00 AM. Pin it to Bangkok time so the
+  // notification always matches what the app shows in the browser.
   return new Date(dueDate).toLocaleString('en-US', {
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
+    timeZone: 'Asia/Bangkok',
   });
 }
 
@@ -41,7 +46,7 @@ async function checkDueSoonTasks() {
          VALUES ($1, $2, 'due_soon', $3)`,
         [task.assignee_id, task.id, message]
       );
-      notifyLineIfLinked(task.assignee_id, `⏰ ${message}`);
+      notifyLineIfLinked(task.assignee_id, `⏰ ${message}`, 'due_soon');
     }
 
     if (result.rows.length > 0) {
@@ -53,11 +58,15 @@ async function checkDueSoonTasks() {
 }
 
 function startDueDateScheduler() {
-  // runs every 15 minutes rather than hourly — now that reminder windows
-  // are custom per task (as short as 1 hour), an hourly check was too
-  // coarse to reliably catch a short lead time within its own window
-  cron.schedule('*/15 * * * *', checkDueSoonTasks);
-  console.log('[due-date-check] scheduler started (runs every 15 minutes)');
+  // Runs every minute. Reminder windows are custom per task (as short as
+  // 1 hour), and people expect a reminder to show up right away once it's
+  // "due" for notifying — a 15-minute tick meant waiting up to 15 minutes
+  // for something that should feel close to instant. The query is cheap
+  // (filtered to tasks due within their own reminder window, with the
+  // NOT EXISTS de-dup check), so running it every minute is fine at this
+  // scale.
+  cron.schedule('* * * * *', checkDueSoonTasks);
+  console.log('[due-date-check] scheduler started (runs every minute)');
 }
 
 module.exports = { startDueDateScheduler, checkDueSoonTasks };
