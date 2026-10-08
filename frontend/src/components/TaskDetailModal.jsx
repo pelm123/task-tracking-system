@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import * as commentsApi from '../api/comments';
 import * as attachmentsApi from '../api/attachments';
+import { REMINDER_PRESETS, DEFAULT_REMINDER_HOURS, getDueCountdown } from '../utils/dueDate';
 import styles from './modal.module.css';
 
 function timeAgo(dateStr) {
@@ -26,9 +27,19 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
   const [description, setDescription] = useState(task.description || '');
   const [priority, setPriority] = useState(task.priority);
   const [dueDate, setDueDate] = useState(toDateInputValue(task.due_date));
+  const [reminderHours, setReminderHours] = useState(task.reminder_hours_before ?? DEFAULT_REMINDER_HOURS);
   const [assigneeIds, setAssigneeIds] = useState((task.assignees || []).map((a) => a.id));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  // ticks every 30s so the "Due in Xh Ym" / "Overdue by..." countdown stays
+  // live while the modal is open, without re-fetching anything
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 30000);
+    return () => clearInterval(id);
+  }, []);
+  const countdown = getDueCountdown(task.due_date, now);
 
   // Members can only reschedule tasks they're assigned to — not anyone
   // else's. PM/admin can reschedule any task. Mirrors the backend check in
@@ -40,6 +51,9 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
   // only a PM/admin assigning them changes that. Mirrors the backend
   // checks in updateTask/createComment/uploadAttachment.
   const isUnassignedMember = currentUser.role === 'member' && !isAssignee;
+  // admin/pm can delete any task; a member can delete only a task they
+  // created themselves — mirrors the backend check in deleteTask
+  const canDelete = canApprove || task.created_by === currentUser.id;
 
   function toggleAssignee(userId) {
     setAssigneeIds((prev) =>
@@ -84,6 +98,9 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
         // to make one — a disabled input never changes, but this keeps the
         // request honest even if that ever stops being true
         due_date: canReschedule ? dueDate || null : toDateInputValue(task.due_date) || null,
+        // same permission as the due date itself — only someone who can
+        // reschedule the task can change how far ahead it warns them
+        reminder_hours_before: canReschedule ? reminderHours : task.reminder_hours_before,
         // an unassigned member can't change who's assigned — send the
         // original set back unchanged even if local state somehow drifted
         assignee_ids: isUnassignedMember ? (task.assignees || []).map((a) => a.id) : assigneeIds,
@@ -229,12 +246,47 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
               disabled={!canReschedule}
               title={canReschedule ? undefined : 'Only assigned members can reschedule this task'}
             />
+            {countdown && (
+              <p
+                className={styles.emptyText}
+                style={{
+                  marginTop: 4,
+                  color: countdown.overdue
+                    ? 'var(--priority-high)'
+                    : countdown.urgent
+                    ? 'var(--priority-medium)'
+                    : undefined,
+                  fontWeight: countdown.overdue || countdown.urgent ? 600 : undefined,
+                }}
+              >
+                {countdown.label}
+              </p>
+            )}
             {!canReschedule && (
               <p className={styles.emptyText} style={{ marginTop: 4 }}>
                 You're not assigned to this task, so you can't reschedule it.
               </p>
             )}
           </div>
+
+          {dueDate && (
+            <div className={styles.field}>
+              <label htmlFor="dReminder">Remind me</label>
+              <select
+                id="dReminder"
+                value={reminderHours}
+                onChange={(e) => setReminderHours(Number(e.target.value))}
+                disabled={!canReschedule}
+                title={canReschedule ? undefined : 'Only assigned members can change the reminder time'}
+              >
+                {REMINDER_PRESETS.map((opt) => (
+                  <option key={opt.hours} value={opt.hours}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className={styles.field}>
             <label>
@@ -275,9 +327,11 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
         {error && <p className={styles.errorText}>{error}</p>}
 
         <div className={styles.formActions}>
-          <button className={styles.btnDanger} onClick={handleDelete}>
-            Delete
-          </button>
+          {canDelete && (
+            <button className={styles.btnDanger} onClick={handleDelete}>
+              Delete
+            </button>
+          )}
           {task.status === 'review' && canApprove && (
             <>
               <button

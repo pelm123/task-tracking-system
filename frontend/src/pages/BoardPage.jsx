@@ -43,6 +43,14 @@ export default function BoardPage() {
   const [showNewTaskModal, setShowNewTaskModal] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
 
+  // ticks every 60s so the due-date countdown on every card stays live
+  // without each card running its own timer
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60000);
+    return () => clearInterval(id);
+  }, []);
+
   const loadTasks = useCallback(async () => {
     if (!currentProjectId) {
       setTasks([]);
@@ -238,7 +246,7 @@ export default function BoardPage() {
       setTasks((prev) => prev.filter((t) => !selectedIds.includes(t.id)));
       exitSelectMode();
     } catch (err) {
-      setError('Bulk delete failed.');
+      setError(err.response?.data?.message || 'Bulk delete failed.');
     }
   }
 
@@ -420,6 +428,7 @@ export default function BoardPage() {
                 onApprove={handleApprove}
                 onDeny={handleDeny}
                 currentUser={user}
+                now={now}
               />
             ))}
           </div>

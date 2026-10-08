@@ -1,4 +1,5 @@
 import { Draggable } from '@hello-pangea/dnd';
+import { getDueCountdown } from '../utils/dueDate';
 import styles from '../pages/board.module.css';
 
 const PRIORITY_COLORS = {
@@ -6,12 +7,6 @@ const PRIORITY_COLORS = {
   medium: 'var(--priority-medium)',
   high: 'var(--priority-high)',
 };
-
-function formatDueDate(dateStr) {
-  if (!dateStr) return null;
-  const date = new Date(dateStr);
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
 
 export default function TaskCard({
   task,
@@ -24,8 +19,10 @@ export default function TaskCard({
   onApprove,
   onDeny,
   currentUser,
+  now,
 }) {
   const showApprovalActions = canApprove && task.status === 'review';
+  const countdown = getDueCountdown(task.due_date, now);
 
   // A member can only move a task they're assigned to — not someone
   // else's (PM/admin can move anything). Mirrors the backend check in
@@ -73,7 +70,22 @@ export default function TaskCard({
             >
               {task.priority}
             </span>
-            {task.due_date && <span className={styles.dueDate}>Due {formatDueDate(task.due_date)}</span>}
+            {countdown && (
+              <span
+                className={styles.dueDate}
+                style={{
+                  color: countdown.overdue
+                    ? 'var(--priority-high)'
+                    : countdown.urgent
+                    ? 'var(--priority-medium)'
+                    : undefined,
+                  fontWeight: countdown.overdue || countdown.urgent ? 600 : undefined,
+                }}
+                title={new Date(task.due_date).toLocaleString()}
+              >
+                {countdown.label}
+              </span>
+            )}
           </div>
           {task.assignees && task.assignees.length > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>

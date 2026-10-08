@@ -2,8 +2,6 @@ const cron = require('node-cron');
 const pool = require('../config/db');
 const { notifyLineIfLinked } = require('../config/line');
 
-const DUE_SOON_WINDOW_HOURS = 24;
-
 function formatDueDate(dueDate) {
   return new Date(dueDate).toLocaleString('en-US', {
     month: 'short',
@@ -15,19 +13,23 @@ function formatDueDate(dueDate) {
 
 async function checkDueSoonTasks() {
   try {
+    // Each task carries its own reminder_hours_before (defaults to 24,
+    // editable per task — see TaskDetailModal's "Remind me" field), so the
+    // window and the notified-already dedup window both use that column
+    // instead of one fixed constant for every task.
     const result = await pool.query(
-      `SELECT t.id, t.title, t.due_date, t.priority, ta.user_id AS assignee_id
+      `SELECT t.id, t.title, t.due_date, t.priority, t.reminder_hours_before, ta.user_id AS assignee_id
        FROM tasks t
        JOIN task_assignees ta ON ta.task_id = t.id
        WHERE t.status != 'done'
          AND t.due_date IS NOT NULL
-         AND t.due_date BETWEEN now() AND now() + interval '${DUE_SOON_WINDOW_HOURS} hours'
+         AND t.due_date BETWEEN now() AND now() + (t.reminder_hours_before || ' hours')::interval
          AND NOT EXISTS (
            SELECT 1 FROM notifications n
            WHERE n.task_id = t.id
              AND n.user_id = ta.user_id
              AND n.type = 'due_soon'
-             AND n.created_at > now() - interval '${DUE_SOON_WINDOW_HOURS} hours'
+             AND n.created_at > now() - (t.reminder_hours_before || ' hours')::interval
          )`
     );
 
@@ -51,8 +53,11 @@ async function checkDueSoonTasks() {
 }
 
 function startDueDateScheduler() {
-  cron.schedule('0 * * * *', checkDueSoonTasks);
-  console.log('[due-date-check] scheduler started (runs hourly)');
+  // runs every 15 minutes rather than hourly — now that reminder windows
+  // are custom per task (as short as 1 hour), an hourly check was too
+  // coarse to reliably catch a short lead time within its own window
+  cron.schedule('*/15 * * * *', checkDueSoonTasks);
+  console.log('[due-date-check] scheduler started (runs every 15 minutes)');
 }
 
 module.exports = { startDueDateScheduler, checkDueSoonTasks };

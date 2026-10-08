@@ -38,6 +38,9 @@ CREATE TABLE tasks (
     status       task_status NOT NULL DEFAULT 'todo',
     priority     task_priority NOT NULL DEFAULT 'medium',
     due_date     TIMESTAMPTZ,
+    -- how many hours before due_date the assignees get a "due soon"
+    -- notification — defaults to a day, editable per task
+    reminder_hours_before INTEGER NOT NULL DEFAULT 24,
     created_by   UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
