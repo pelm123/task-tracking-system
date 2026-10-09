@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import * as projectsApi from '../api/projects';
+import { registerProjectColors } from '../utils/projectColor';
 
 const ProjectContext = createContext(null);
 
@@ -12,6 +13,7 @@ export function ProjectProvider({ children }) {
 
   const refresh = useCallback(async () => {
     const data = await projectsApi.listProjects();
+    registerProjectColors(data); // before setProjects, so the re-render already sees the colors
     setProjects(data);
     // if nothing selected yet (or the saved selection no longer exists), default to the first project
     setCurrentProjectId((prev) => {
@@ -32,7 +34,11 @@ export function ProjectProvider({ children }) {
 
   async function createProject(payload) {
     const created = await projectsApi.createProject(payload);
-    setProjects((prev) => [...prev, created]);
+    setProjects((prev) => {
+      const next = [...prev, created];
+      registerProjectColors(next);
+      return next;
+    });
     selectProject(created.id);
     return created;
   }
