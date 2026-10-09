@@ -55,8 +55,27 @@ function formatShortDate(dateStr) {
   return new Date(dateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+// Deterministic color per project (same project always gets the same
+// color), so tasks from different projects are visually distinguishable
+// when the calendar is showing "All projects" at once — independent of the
+// priority color already used for the chip's left border.
+function colorForProject(projectId) {
+  if (!projectId) return 'var(--color-text-muted)';
+  let hash = 0;
+  for (let i = 0; i < projectId.length; i++) {
+    hash = (hash * 31 + projectId.charCodeAt(i)) >>> 0;
+  }
+  return `hsl(${hash % 360}, 60%, 55%)`;
+}
+
+const ALL_PROJECTS = 'all';
+const PROJECT_FILTER_STORAGE_KEY = 'calendarProjectFilter';
+
 export default function CalendarPage() {
-  const { currentProjectId, currentProject } = useProject();
+  const { projects } = useProject();
+  const [projectFilter, setProjectFilter] = useState(
+    () => localStorage.getItem(PROJECT_FILTER_STORAGE_KEY) || ALL_PROJECTS
+  );
   const [tasks, setTasks] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -66,22 +85,28 @@ export default function CalendarPage() {
   const [rangeEnd, setRangeEnd] = useState('');
   const [selectedTask, setSelectedTask] = useState(null);
 
+  const showingAllProjects = projectFilter === ALL_PROJECTS;
+
+  function handleProjectFilterChange(value) {
+    setProjectFilter(value);
+    localStorage.setItem(PROJECT_FILTER_STORAGE_KEY, value);
+  }
+
+  // Consolidates every project's tasks into one calendar by default — the
+  // backend's /tasks endpoint returns tasks across ALL projects when no
+  // project_id is passed, so "All projects" just means omitting that param,
+  // same as narrowing to one project means passing it.
   const loadTasks = useCallback(async () => {
-    if (!currentProjectId) {
-      setTasks([]);
-      setLoading(false);
-      return;
-    }
     setLoading(true);
     try {
-      const data = await tasksApi.listTasks({ project_id: currentProjectId });
+      const data = await tasksApi.listTasks(showingAllProjects ? {} : { project_id: projectFilter });
       setTasks(data.filter((t) => t.due_date));
     } catch (err) {
       setError('Could not load tasks. Is the API running?');
     } finally {
       setLoading(false);
     }
-  }, [currentProjectId]);
+  }, [projectFilter, showingAllProjects]);
 
   useEffect(() => {
     loadTasks();
@@ -164,25 +189,51 @@ export default function CalendarPage() {
     return <div className={styles.screen}>Loading calendar…</div>;
   }
 
-  if (!currentProjectId) {
+  if (projects.length === 0) {
     return (
       <div className={styles.screen}>
         <h1>Calendar</h1>
-        <p className={styles.subLine}>No project selected yet.</p>
+        <p className={styles.subLine}>No projects yet.</p>
       </div>
     );
   }
+
+  const headerTitle = showingAllProjects
+    ? 'All Projects'
+    : projects.find((p) => p.id === projectFilter)?.name || 'Calendar';
 
   return (
     <div className={styles.screen}>
       <div className={styles.header}>
         <div>
-          <h1>{currentProject?.name || 'Calendar'}</h1>
+          <h1>{headerTitle}</h1>
           <p className={styles.subLine}>
             Click a day, then another, to select a range — or set exact dates on the right.
           </p>
         </div>
+        <label className={styles.rangeLabel}>
+          Showing
+          <select value={projectFilter} onChange={(e) => handleProjectFilterChange(e.target.value)}>
+            <option value={ALL_PROJECTS}>All projects</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
+
+      {showingAllProjects && (
+        <div className={styles.legend}>
+          {projects.map((p) => (
+            <span key={p.id} className={styles.legendItem}>
+              <span className={styles.legendSwatch} style={{ background: colorForProject(p.id) }} />
+              {p.name}
+            </span>
+          ))}
+        </div>
+      )}
 
       {error && <p style={{ color: 'var(--priority-high)', marginBottom: 16 }}>{error}</p>}
 
@@ -249,13 +300,19 @@ export default function CalendarPage() {
                     key={t.id}
                     className={styles.taskChip}
                     style={{ borderLeftColor: PRIORITY_COLORS[t.priority] }}
-                    title={t.title}
+                    title={showingAllProjects ? `${t.project_name} — ${t.title}` : t.title}
                     onClick={(e) => {
                       e.stopPropagation();
                       setSelectedTask(t);
                     }}
                   >
-                    {t.title}
+                    {showingAllProjects && (
+                      <span
+                        className={styles.projectDot}
+                        style={{ background: colorForProject(t.project_id) }}
+                      />
+                    )}
+                    <span className={styles.taskChipText}>{t.title}</span>
                   </div>
                 ))}
                 {overflow > 0 && <div className={styles.taskOverflow}>+{overflow} more</div>}
@@ -282,6 +339,14 @@ export default function CalendarPage() {
                     style={{ background: PRIORITY_COLORS[t.priority] }}
                   />
                   <span className={styles.rangeTitle}>{t.title}</span>
+                  {showingAllProjects && (
+                    <span
+                      className={styles.rangeProjectTag}
+                      style={{ color: colorForProject(t.project_id), borderColor: colorForProject(t.project_id) }}
+                    >
+                      {t.project_name}
+                    </span>
+                  )}
                   <span className={styles.rangeMeta}>
                     {t.assignees && t.assignees.length > 0
                       ? t.assignees.map((a) => a.name).join(', ')
