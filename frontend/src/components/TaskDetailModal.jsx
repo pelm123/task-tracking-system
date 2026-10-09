@@ -22,7 +22,8 @@ function timeAgo(dateStr) {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
-const MAX_UPLOAD_BYTES = 20 * 1024 * 1024; // keep in sync with backend middleware/upload.js
+const MAX_UPLOAD_MB = 200; // keep in sync with backend middleware/upload.js (UPLOAD_MAX_MB)
+const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
 
 export default function TaskDetailModal({ task, users, onClose, onUpdate, onDelete, canApprove, onApprove, onDeny }) {
   const { user: currentUser } = useAuth();
@@ -228,7 +229,7 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > MAX_UPLOAD_BYTES) {
-      setError('That file is larger than 20 MB. Please choose a smaller one.');
+      setError(`That file is larger than ${MAX_UPLOAD_MB} MB. Please choose a smaller one.`);
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
