@@ -18,11 +18,19 @@ async function listProjects(req, res) {
   }
 }
 
+// Keep in sync with projects.name VARCHAR(500) and the form's maxLength.
+const MAX_PROJECT_NAME_LENGTH = 500;
+
 // POST /projects
 async function createProject(req, res) {
   const { name, description } = req.body;
   if (!name || !name.trim()) {
     return res.status(400).json({ message: 'name is required' });
+  }
+  if (name.trim().length > MAX_PROJECT_NAME_LENGTH) {
+    return res.status(400).json({
+      message: `Project name is too long (${name.trim().length} characters). The limit is ${MAX_PROJECT_NAME_LENGTH}.`,
+    });
   }
 
   try {
@@ -42,6 +50,11 @@ async function createProject(req, res) {
 // PATCH /projects/:id
 async function updateProject(req, res) {
   const { name, description } = req.body;
+  if (name !== undefined && name !== null && name.trim().length > MAX_PROJECT_NAME_LENGTH) {
+    return res.status(400).json({
+      message: `Project name is too long (${name.trim().length} characters). The limit is ${MAX_PROJECT_NAME_LENGTH}.`,
+    });
+  }
 
   try {
     const result = await pool.query(
