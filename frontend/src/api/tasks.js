@@ -39,3 +39,7 @@ export function bulkAssign(taskIds, assigneeId) {
 export function bulkDelete(taskIds) {
   return client.delete('/tasks/bulk', { data: { taskIds } });
 }
+
+export function listTaskActivity(id) {
+  return client.get(`/tasks/${id}/activity`).then((res) => res.data);
+}
