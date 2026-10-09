@@ -68,7 +68,22 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
   // created themselves — mirrors the backend check in deleteTask
   const canDelete = canApprove || task.created_by === currentUser.id;
 
+  // A plain member who's on the task can bring in fellow members to help, but
+  // can't remove anyone or add a PM/admin — only PM/admin can. Mirrors the
+  // backend check (checkMemberAssigneeChange in task.controller.js).
+  const isMemberRole = currentUser.role === 'member';
+  const originalAssigneeIds = (task.assignees || []).map((a) => a.id);
+  function assigneeLockReason(u) {
+    if (isUnassignedMember) return 'A PM/admin has to assign you first';
+    if (!isMemberRole) return null;
+    if (originalAssigneeIds.includes(u.id)) return 'Only a PM or admin can remove someone from a task';
+    if (u.role !== 'member') return 'You can only add team members to help';
+    return null;
+  }
+
   function toggleAssignee(userId) {
+    const person = users.find((u) => u.id === userId);
+    if (person && assigneeLockReason(person)) return;
     setAssigneeIds((prev) =>
       prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
     );
@@ -418,12 +433,17 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
             <div className={styles.assigneeList}>
               {users.length === 0 && <p className={styles.emptyText}>No users available.</p>}
               {users.map((u) => (
-                <label key={u.id} className={styles.assigneeRow}>
+                <label
+                  key={u.id}
+                  className={styles.assigneeRow}
+                  title={assigneeLockReason(u) || undefined}
+                  style={assigneeLockReason(u) ? { opacity: 0.6 } : undefined}
+                >
                   <input
                     type="checkbox"
                     checked={assigneeIds.includes(u.id)}
                     onChange={() => toggleAssignee(u.id)}
-                    disabled={isUnassignedMember}
+                    disabled={Boolean(assigneeLockReason(u))}
                   />
                   <span className={styles.assigneeName}>
                     {u.name} <span className={styles.assigneeRole}>({u.role})</span>
@@ -434,6 +454,11 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
             {isUnassignedMember && (
               <p className={styles.emptyText} style={{ marginTop: 4 }}>
                 A PM/admin has to assign you to this task before you can assign it to yourself or others.
+              </p>
+            )}
+            {isMemberRole && !isUnassignedMember && (
+              <p className={styles.emptyText} style={{ marginTop: 4 }}>
+                You can add other team members to help with this task. Only a PM or admin can remove someone.
               </p>
             )}
           </div>

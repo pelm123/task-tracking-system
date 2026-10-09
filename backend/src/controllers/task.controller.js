@@ -242,6 +242,37 @@ function sameIdSet(a, b) {
   return true;
 }
 
+// Rules for a plain "member" changing who is on a task (admin/pm are never
+// restricted). A member who's on the task can bring in teammates to help, but:
+//   - they can only ADD other members (not PMs or admins), and
+//   - they can never REMOVE anyone — only a PM/admin can take people off.
+// Returns an error message string if the change breaks a rule, else null.
+async function checkMemberAssigneeChange(taskId, newIds) {
+  const currentRows = await pool.query('SELECT user_id FROM task_assignees WHERE task_id = $1', [taskId]);
+  const currentIds = new Set(currentRows.rows.map((r) => r.user_id));
+  const wanted = new Set((newIds || []).filter(Boolean));
+
+  for (const id of currentIds) {
+    if (!wanted.has(id)) {
+      return 'Only a PM or admin can remove someone from a task.';
+    }
+  }
+
+  const added = [...wanted].filter((id) => !currentIds.has(id));
+  if (added.length > 0) {
+    const roles = await pool.query(
+      'SELECT id, role FROM users WHERE id = ANY($1::uuid[]) AND is_approved = TRUE',
+      [added]
+    );
+    const allMembers =
+      roles.rows.length === added.length && roles.rows.every((r) => r.role === 'member');
+    if (!allMembers) {
+      return 'You can only add team members to help with a task.';
+    }
+  }
+  return null;
+}
+
 // PATCH /tasks/:id  (general edit: title, description, priority, due_date, assignee_ids)
 async function updateTask(req, res) {
   const { title, description, priority, due_date, reminder_hours_before, assignee_ids } = req.body;
@@ -310,6 +341,12 @@ async function updateTask(req, res) {
               message: 'You can only assign a task to yourself or others once a PM/admin has assigned you to it.',
             });
           }
+        }
+      } else if (assignee_ids !== undefined) {
+        // On the task (or its creator): may add fellow members, never remove anyone
+        const problem = await checkMemberAssigneeChange(req.params.id, assignee_ids);
+        if (problem) {
+          return res.status(403).json({ message: problem });
         }
       }
     }
@@ -672,8 +709,20 @@ async function bulkAssign(req, res) {
   }
 
   try {
-    // A member can only reassign tasks they're already assigned to.
+    // A member can only reassign tasks they're already assigned to — and can
+    // only ADD fellow members; clearing assignees is for PM/admin.
     if (req.user.role === 'member') {
+      if (!assignee_id) {
+        return res.status(403).json({ message: 'Only a PM or admin can remove assignees from a task.' });
+      }
+      const target = await pool.query(
+        "SELECT 1 FROM users WHERE id = $1 AND role = 'member' AND is_approved = TRUE",
+        [assignee_id]
+      );
+      if (target.rows.length === 0) {
+        return res.status(403).json({ message: 'You can only add team members to help with a task.' });
+      }
+
       const unowned = await pool.query(
         `SELECT t.id FROM tasks t
          WHERE t.id = ANY($1::uuid[])
