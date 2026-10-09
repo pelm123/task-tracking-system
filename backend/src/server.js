@@ -21,6 +21,7 @@ const lineRoutes = require('./routes/line.routes');
 const { handleWebhook } = require('./controllers/line.controller');
 const { startDueDateScheduler } = require('./jobs/dueDateCheck');
 const { startNotificationPush } = require('./config/notificationPush');
+const localize = require('./middleware/localize');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -34,6 +35,9 @@ app.use(cors());
 app.post('/line/webhook', express.raw({ type: 'application/json' }), handleWebhook);
 
 app.use(express.json());
+
+// Thai/English API messages, chosen by the Accept-Language header
+app.use(localize);
 
 app.use('/', healthRoutes);
 app.use('/auth', authRoutes);

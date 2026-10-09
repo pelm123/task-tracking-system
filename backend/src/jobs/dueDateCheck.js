@@ -1,20 +1,6 @@
 const cron = require('node-cron');
 const pool = require('../config/db');
-const { notifyLineIfLinked } = require('../config/line');
-
-function formatDueDate(dueDate) {
-  // Without an explicit timeZone, toLocaleString renders in the SERVER's
-  // local time (often UTC), not the user's — so a 6:00 PM Bangkok due date
-  // showed up in the LINE message as 11:00 AM. Pin it to Bangkok time so the
-  // notification always matches what the app shows in the browser.
-  return new Date(dueDate).toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    timeZone: 'Asia/Bangkok',
-  });
-}
+const { notify } = require('../config/notify');
 
 async function checkDueSoonTasks() {
   try {
@@ -39,14 +25,13 @@ async function checkDueSoonTasks() {
     );
 
     for (const task of result.rows) {
-      const priorityLabel = task.priority.charAt(0).toUpperCase() + task.priority.slice(1);
-      const message = `"${task.title}" is due ${formatDueDate(task.due_date)} (${priorityLabel} priority)`;
-      await pool.query(
-        `INSERT INTO notifications (user_id, task_id, type, message)
-         VALUES ($1, $2, 'due_soon', $3)`,
-        [task.assignee_id, task.id, message]
-      );
-      notifyLineIfLinked(task.assignee_id, `⏰ ${message}`, 'due_soon');
+      await notify(task.assignee_id, {
+        taskId: task.id,
+        type: 'due_soon',
+        emoji: '⏰',
+        build: (L) =>
+          L.tr('n.dueSoon', { title: task.title, due: L.due(task.due_date), priority: L.priority(task.priority) }),
+      });
     }
 
     if (result.rows.length > 0) {
@@ -92,14 +77,13 @@ async function checkOverdueTasks() {
     );
 
     for (const task of result.rows) {
-      const priorityLabel = task.priority.charAt(0).toUpperCase() + task.priority.slice(1);
-      const message = `"${task.title}" is overdue — it was due ${formatDueDate(task.due_date)} (${priorityLabel} priority)`;
-      await pool.query(
-        `INSERT INTO notifications (user_id, task_id, type, message)
-         VALUES ($1, $2, 'overdue', $3)`,
-        [task.user_id, task.id, message]
-      );
-      notifyLineIfLinked(task.user_id, `🚨 ${message}`, 'overdue');
+      await notify(task.user_id, {
+        taskId: task.id,
+        type: 'overdue',
+        emoji: '🚨',
+        build: (L) =>
+          L.tr('n.overdue', { title: task.title, due: L.due(task.due_date), priority: L.priority(task.priority) }),
+      });
     }
 
     if (result.rows.length > 0) {

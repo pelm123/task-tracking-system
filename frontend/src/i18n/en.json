@@ -511,5 +511,14 @@
     "resetIntroAfter": ". Their current password stops working immediately — tell them the new one privately.",
     "pwPlaceholder": "At least 6 characters",
     "setPassword": "Set password"
+  },
+  "activityDetail": {
+    "title": "title → \"{value}\"",
+    "description": "description updated",
+    "priority": "priority → {value}",
+    "due": "due date → {value}",
+    "reminder": "reminder time updated",
+    "assignees": "assignees → {value}",
+    "nobody": "none"
   }
 }

@@ -1,5 +1,5 @@
 const pool = require('../config/db');
-const { notifyLineIfLinked } = require('../config/line');
+const { notifyMany } = require('../config/notify');
 
 function snippet(text, maxLen = 60) {
   const trimmed = text.trim();
@@ -67,16 +67,18 @@ async function createComment(req, res) {
 
     if (assigneeIds.length > 0) {
       const authorResult = await pool.query('SELECT name FROM users WHERE id = $1', [req.user.id]);
-      const authorName = authorResult.rows[0]?.name || 'Someone';
-      const message = `${authorName} commented on "${task.title}": "${snippet(content)}"`;
-      for (const assigneeId of assigneeIds) {
-        await pool.query(
-          `INSERT INTO notifications (user_id, task_id, type, message)
-           VALUES ($1, $2, 'comment', $3)`,
-          [assigneeId, task.id, message]
-        );
-        notifyLineIfLinked(assigneeId, `💬 ${message}`, 'comment');
-      }
+      const authorName = authorResult.rows[0]?.name || null;
+      await notifyMany(assigneeIds, {
+        taskId: task.id,
+        type: 'comment',
+        emoji: '💬',
+        build: (L) =>
+          L.tr('n.comment', {
+            actor: authorName || L.tr('someone'),
+            title: task.title,
+            snippet: snippet(content),
+          }),
+      });
     }
 
     res.status(201).json(result.rows[0]);

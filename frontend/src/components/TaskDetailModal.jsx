@@ -18,6 +18,60 @@ import styles from './modal.module.css';
 const MAX_UPLOAD_MB = 200; // keep in sync with backend middleware/upload.js (UPLOAD_MAX_MB)
 const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
 
+// Activity details are stored language-neutral (JSON) so they can be shown in
+// whichever language the viewer is using. Older rows, and file names, are
+// plain text and shown as they are.
+const LEGACY_STATUS = { 'To Do': 'todo', 'In Progress': 'in_progress', Review: 'review', Done: 'done' };
+function describeLegacyDetail(detail) {
+  // rows written before details became language-neutral, e.g. "To Do → In Progress"
+  const m = /^(To Do|In Progress|Review|Done)? ?→ (To Do|In Progress|Review|Done)(?:: ([\s\S]*))?$/.exec(detail);
+  if (!m) return detail;
+  const to = t(`status.${LEGACY_STATUS[m[2]]}`);
+  const move = m[1] ? `${t(`status.${LEGACY_STATUS[m[1]]}`)} → ${to}` : `→ ${to}`;
+  return m[3] ? `${move}: ${m[3]}` : move;
+}
+
+function describeActivityDetail(detail) {
+  let d = null;
+  try {
+    d = JSON.parse(detail);
+  } catch (err) {
+    return describeLegacyDetail(detail);
+  }
+  if (!d || typeof d !== 'object') return detail;
+
+  const status = (s) => (s ? t(`status.${s}`) : '');
+  if (Array.isArray(d.changes)) {
+    return d.changes
+      .map((c) => {
+        switch (c.k) {
+          case 'title':
+            return t('activityDetail.title', { value: c.v });
+          case 'priority':
+            return t('activityDetail.priority', { value: t(`priority.${c.v}`) });
+          case 'due':
+            return t('activityDetail.due', { value: formatDateTime(c.v) });
+          case 'assignees':
+            return t('activityDetail.assignees', {
+              value: (c.v || []).join(', ') || t('activityDetail.nobody'),
+            });
+          case 'description':
+          case 'reminder':
+            return t(`activityDetail.${c.k}`);
+          default:
+            return '';
+        }
+      })
+      .filter(Boolean)
+      .join('; ');
+  }
+  if (d.to) {
+    const move = d.from ? `${status(d.from)} → ${status(d.to)}` : `→ ${status(d.to)}`;
+    return d.reason ? `${move}: ${d.reason}` : move;
+  }
+  return detail;
+}
+
 export default function TaskDetailModal({ task, users, onClose, onUpdate, onDelete, canApprove, onApprove, onDeny }) {
   const { user: currentUser } = useAuth();
   const [title, setTitle] = useState(task.title);
@@ -725,7 +779,7 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
                   <span className={styles.activityText}>
                     <strong>{a.user_name || t('detail.someone')}</strong>{' '}
                     {t(`activity.${a.action}`) === `activity.${a.action}` ? a.action : t(`activity.${a.action}`)}
-                    {a.detail ? <span className={styles.activityDetail}>{a.detail}</span> : null}
+                    {a.detail ? <span className={styles.activityDetail}>{describeActivityDetail(a.detail)}</span> : null}
                   </span>
                 </li>
               ))}

@@ -511,5 +511,14 @@
     "resetIntroAfter": " รหัสผ่านเดิมจะใช้ไม่ได้ทันที — โปรดแจ้งรหัสใหม่ให้เขาเป็นการส่วนตัว",
     "pwPlaceholder": "อย่างน้อย 6 ตัวอักษร",
     "setPassword": "ตั้งรหัสผ่าน"
+  },
+  "activityDetail": {
+    "title": "ชื่องาน → \"{value}\"",
+    "description": "แก้ไขรายละเอียด",
+    "priority": "ความสำคัญ → {value}",
+    "due": "กำหนดส่ง → {value}",
+    "reminder": "แก้ไขเวลาแจ้งเตือน",
+    "assignees": "ผู้รับผิดชอบ → {value}",
+    "nobody": "ไม่มี"
   }
 }

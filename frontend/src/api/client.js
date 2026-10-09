@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { getLang } from '../i18n';
 
 // In dev, requests go to /api and Vite's proxy (see vite.config.js) forwards
 // them to the backend on port 4000 — this means the frontend never needs to
@@ -7,8 +8,10 @@ const client = axios.create({
   baseURL: '/api',
 });
 
-// attach the JWT (if we have one) to every outgoing request
+// attach the JWT (if we have one) to every outgoing request, plus the current
+// language so the server answers in Thai or English
 client.interceptors.request.use((config) => {
+  config.headers['Accept-Language'] = getLang();
   const token = localStorage.getItem('token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
