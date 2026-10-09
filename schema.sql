@@ -28,6 +28,8 @@ CREATE TABLE users (
       '{"assigned": true, "status_change": true, "comment": true, "due_soon": true, "approved": true, "approval_denied": true, "overdue": true}'::jsonb,
     -- new sign-ups are inserted as FALSE and can't log in until an admin approves
     is_approved   BOOLEAN NOT NULL DEFAULT TRUE,
+    -- interface language; notifications and LINE messages are written in it
+    language      VARCHAR(2) NOT NULL DEFAULT 'th' CHECK (language IN ('th', 'en')),
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

@@ -1,5 +1,5 @@
 const express = require('express');
-const { register, login, updateProfile, changePassword } = require('../controllers/auth.controller');
+const { register, login, updateProfile, updateLanguage, changePassword } = require('../controllers/auth.controller');
 const { authenticate } = require('../middleware/auth');
 const pool = require('../config/db');
 
@@ -8,13 +8,14 @@ const router = express.Router();
 router.post('/register', register);
 router.post('/login', login);
 router.patch('/me', authenticate, updateProfile);
+router.patch('/me/language', authenticate, updateLanguage);
 router.patch('/me/password', authenticate, changePassword);
 
 // quick sanity-check route to confirm the JWT middleware works end to end
 router.get('/me', authenticate, async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, name, email, role, created_at FROM users WHERE id = $1',
+      'SELECT id, name, email, role, language, created_at FROM users WHERE id = $1',
       [req.user.id]
     );
     if (result.rows.length === 0) {

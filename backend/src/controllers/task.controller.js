@@ -1,10 +1,10 @@
 const pool = require('../config/db');
-const { notifyLineIfLinked } = require('../config/line');
 const { logActivity } = require('../config/activity');
+const { notify, notifyMany, getUserLanguage } = require('../config/notify');
+const { describeChange, forLang } = require('../config/i18n');
 
 const VALID_STATUSES = ['todo', 'in_progress', 'review', 'done'];
 const VALID_PRIORITIES = ['low', 'medium', 'high'];
-const STATUS_LABELS = { todo: 'To Do', in_progress: 'In Progress', review: 'Review', done: 'Done' };
 const MIN_REMINDER_HOURS = 1;
 const MAX_REMINDER_HOURS = 24 * 30; // 30 days — generous ceiling, not a real limit
 
@@ -37,20 +37,6 @@ async function getUserName(userId) {
   return result.rows[0]?.name || null;
 }
 
-function formatDueDate(dueDate) {
-  if (!dueDate) return 'no due date';
-  // Pin to Bangkok time — without an explicit timeZone this renders in the
-  // SERVER's local time (often UTC), which made a 6:00 PM due date show up
-  // in notifications as 11:00 AM. See dueDateCheck.js for the same fix.
-  return new Date(dueDate).toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    timeZone: 'Asia/Bangkok',
-  });
-}
-
 // true if n is a finite integer within [MIN_REMINDER_HOURS, MAX_REMINDER_HOURS]
 function isValidReminderHours(n) {
   return Number.isInteger(n) && n >= MIN_REMINDER_HOURS && n <= MAX_REMINDER_HOURS;
@@ -77,21 +63,26 @@ async function getEnrichedTask(id) {
 // task must already be the ENRICHED version (has project_name, priority, due_date).
 async function notifyAssignees(task, userIds, actorId) {
   const actorName = await getUserName(actorId);
-  const priorityLabel = task.priority.charAt(0).toUpperCase() + task.priority.slice(1);
-  const message = `${actorName} assigned you to "${task.title}" (${priorityLabel} priority, due ${formatDueDate(task.due_date)}) in ${task.project_name}`;
 
   for (const userId of userIds) {
     if (!userId || userId === actorId) continue; // don't notify yourself
     try {
-      await pool.query(
-        `INSERT INTO notifications (user_id, task_id, type, message)
-         VALUES ($1, $2, 'assigned', $3)`,
-        [userId, task.id, message]
-      );
+      await notify(userId, {
+        taskId: task.id,
+        type: 'assigned',
+        emoji: '📋',
+        build: (L) =>
+          L.tr('n.assigned', {
+            actor: actorName || L.tr('someone'),
+            title: task.title,
+            priority: L.priority(task.priority),
+            due: L.due(task.due_date),
+            project: task.project_name,
+          }),
+      });
     } catch (err) {
       console.error('notifyAssignees error:', err.message);
     }
-    notifyLineIfLinked(userId, `📋 ${message}`, 'assigned');
   }
 }
 
@@ -373,19 +364,19 @@ async function updateTask(req, res) {
     // notification for anyone newly added.
     const changedFields = [];
     if (title !== undefined && title !== existing.title) {
-      changedFields.push(`title → "${title}"`);
+      changedFields.push({ k: 'title', v: title });
     }
     if (description !== undefined && description !== (existing.description || '')) {
-      changedFields.push('description updated');
+      changedFields.push({ k: 'description' });
     }
     if (priority !== undefined && priority !== existing.priority) {
-      changedFields.push(`priority → ${priority}`);
+      changedFields.push({ k: 'priority', v: priority });
     }
     if (due_date !== undefined && !sameDueDate(due_date, existing.due_date)) {
-      changedFields.push(`due date → ${formatDueDate(due_date)}`);
+      changedFields.push({ k: 'due', v: new Date(due_date).toISOString() });
     }
     if (reminder_hours_before !== undefined && reminder_hours_before !== existing.reminder_hours_before) {
-      changedFields.push('reminder time updated');
+      changedFields.push({ k: 'reminder' });
     }
 
     let assigneesBefore = null;
@@ -417,10 +408,11 @@ async function updateTask(req, res) {
 
     const activityParts = [...changedFields];
     if (assigneesBefore && !sameIdSet(assigneesBefore, assignee_ids)) {
-      activityParts.push(`assignees → ${task.assignees.map((a) => a.name).join(', ') || 'none'}`);
+      activityParts.push({ k: 'assignees', v: task.assignees.map((a) => a.name) });
     }
     if (activityParts.length > 0) {
-      await logActivity(task.id, req.user.id, 'edited', activityParts.join('; '));
+      // stored language-neutral; the task popup renders it in the viewer's language
+      await logActivity(task.id, req.user.id, 'edited', JSON.stringify({ changes: activityParts }));
     }
 
     if (newlyAssigned.length > 0) {
@@ -434,16 +426,20 @@ async function updateTask(req, res) {
     // avoid a duplicate ping for the same save.
     if (changedFields.length > 0) {
       const actorName = await getUserName(req.user.id);
-      const message = `${actorName} updated "${task.title}" (${changedFields.join(', ')})`;
       const newlyAssignedSet = new Set(newlyAssigned);
-      for (const assignee of task.assignees) {
-        if (assignee.id === req.user.id || newlyAssignedSet.has(assignee.id)) continue;
-        await pool.query(
-          `INSERT INTO notifications (user_id, task_id, type, message)
-           VALUES ($1, $2, 'task_updated', $3)`,
-          [assignee.id, task.id, message]
-        );
-      }
+      const recipients = task.assignees
+        .map((a) => a.id)
+        .filter((id) => id !== req.user.id && !newlyAssignedSet.has(id));
+      await notifyMany(recipients, {
+        taskId: task.id,
+        type: 'task_updated', // no emoji → in-app only, never LINE
+        build: (L) =>
+          L.tr('n.updated', {
+            actor: actorName || L.tr('someone'),
+            title: task.title,
+            changes: changedFields.map((c) => describeChange(L, c)).join(', '),
+          }),
+      });
     }
 
     broadcastTask(req, task.project_id, 'task:upserted', task);
@@ -522,25 +518,25 @@ async function updateTaskStatus(req, res) {
     );
 
     const task = await getEnrichedTask(req.params.id);
-    await logActivity(
-      task.id,
-      req.user.id,
-      'status',
-      `${STATUS_LABELS[previousStatus]} → ${STATUS_LABELS[status]}`
-    );
+    await logActivity(task.id, req.user.id, 'status', JSON.stringify({ from: previousStatus, to: status }));
 
     if (task.assignees.length > 0) {
       const actorName = await getUserName(req.user.id);
-      const message = `${actorName} moved "${task.title}" from ${STATUS_LABELS[previousStatus]} → ${STATUS_LABELS[status]}`;
-      for (const assignee of task.assignees) {
-        if (assignee.id === req.user.id) continue; // don't notify the actor
-        await pool.query(
-          `INSERT INTO notifications (user_id, task_id, type, message)
-           VALUES ($1, $2, 'status_change', $3)`,
-          [assignee.id, task.id, message]
-        );
-        notifyLineIfLinked(assignee.id, `🔄 ${message}`, 'status_change');
-      }
+      await notifyMany(
+        task.assignees.map((a) => a.id).filter((id) => id !== req.user.id), // don't notify the actor
+        {
+          taskId: task.id,
+          type: 'status_change',
+          emoji: '🔄',
+          build: (L) =>
+            L.tr('n.moved', {
+              actor: actorName || L.tr('someone'),
+              title: task.title,
+              from: L.status(previousStatus),
+              to: L.status(status),
+            }),
+        }
+      );
     }
     broadcastTask(req, task.project_id, 'task:upserted', task);
 
@@ -569,19 +565,23 @@ async function approveTask(req, res) {
       [req.params.id]
     );
     const task = await getEnrichedTask(req.params.id);
-    await logActivity(task.id, req.user.id, 'approved', 'Review → Done');
+    await logActivity(task.id, req.user.id, 'approved', JSON.stringify({ from: 'review', to: 'done' }));
 
     const actorName = await getUserName(req.user.id);
-    const message = `${actorName} approved "${task.title}" — moved to Done`;
-    for (const assignee of task.assignees) {
-      if (assignee.id === req.user.id) continue; // don't notify the actor
-      await pool.query(
-        `INSERT INTO notifications (user_id, task_id, type, message)
-         VALUES ($1, $2, 'approved', $3)`,
-        [assignee.id, task.id, message]
-      );
-      notifyLineIfLinked(assignee.id, `✅ ${message}`, 'approved');
-    }
+    await notifyMany(
+      task.assignees.map((a) => a.id).filter((id) => id !== req.user.id), // don't notify the actor
+      {
+        taskId: task.id,
+        type: 'approved',
+        emoji: '✅',
+        build: (L) =>
+          L.tr('n.approved', {
+            actor: actorName || L.tr('someone'),
+            title: task.title,
+            done: L.status('done'),
+          }),
+      }
+    );
 
     broadcastTask(req, task.project_id, 'task:upserted', task);
     res.json(task);
@@ -625,12 +625,14 @@ async function denyTask(req, res) {
 
     // record the PM's reason as a real comment, so it's visible in the
     // task's comment thread, not just buried in a notification string
-    const commentPrefix = isReopen ? 'Reopened' : 'Approval denied';
+    // (written in the actor's language — a comment is stored once, not per reader)
+    const actorLang = forLang(await getUserLanguage(req.user.id));
+    const commentText = actorLang.tr(isReopen ? 'commentReopened' : 'commentDenied', { reason: trimmedReason });
     const commentResult = await pool.query(
       `INSERT INTO comments (task_id, user_id, content)
        VALUES ($1, $2, $3)
        RETURNING id, content, created_at, user_id`,
-      [req.params.id, req.user.id, `${commentPrefix} — returned to To Do: ${trimmedReason}`]
+      [req.params.id, req.user.id, commentText]
     );
 
     const task = await getEnrichedTask(req.params.id);
@@ -638,21 +640,26 @@ async function denyTask(req, res) {
       task.id,
       req.user.id,
       isReopen ? 'reopened' : 'denied',
-      `${isReopen ? 'Done' : 'Review'} → To Do: ${trimmedReason}`
+      JSON.stringify({ from: isReopen ? 'done' : 'review', to: 'todo', reason: trimmedReason })
     );
 
     const actorName = await getUserName(req.user.id);
-    const reasonLabel = isReopen ? 'reopened' : 'approval denied';
-    const message = `${actorName} returned "${task.title}" to To Do (${reasonLabel}) — "${trimmedReason}"`;
-    for (const assignee of task.assignees) {
-      if (assignee.id === req.user.id) continue; // don't notify the actor
-      await pool.query(
-        `INSERT INTO notifications (user_id, task_id, type, message)
-         VALUES ($1, $2, 'approval_denied', $3)`,
-        [assignee.id, task.id, message]
-      );
-      notifyLineIfLinked(assignee.id, `↩️ ${message}`, 'approval_denied');
-    }
+    await notifyMany(
+      task.assignees.map((a) => a.id).filter((id) => id !== req.user.id), // don't notify the actor
+      {
+        taskId: task.id,
+        type: 'approval_denied',
+        emoji: '↩️',
+        build: (L) =>
+          L.tr('n.denied', {
+            actor: actorName || L.tr('someone'),
+            title: task.title,
+            todo: L.status('todo'),
+            why: L.tr(isReopen ? 'n.deniedWhyReopened' : 'n.deniedWhyDenied'),
+            reason: trimmedReason,
+          }),
+      }
+    );
 
     broadcastTask(req, task.project_id, 'task:upserted', task);
     res.json({ ...task, denialComment: { ...commentResult.rows[0], author_name: actorName } });
@@ -781,7 +788,7 @@ async function bulkUpdateStatus(req, res) {
     );
     const updated = await Promise.all(result.rows.map((r) => getEnrichedTask(r.id)));
     for (const task of updated) {
-      await logActivity(task.id, req.user.id, 'status', `→ ${STATUS_LABELS[status]}`);
+      await logActivity(task.id, req.user.id, 'status', JSON.stringify({ to: status }));
       broadcastTask(req, task.project_id, 'task:upserted', task);
     }
     res.json(updated);

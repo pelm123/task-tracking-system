@@ -1,6 +1,7 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const pool = require('../config/db');
+const { normalizeLang, LANGS } = require('../config/i18n');
 
 const SALT_ROUNDS = 10;
 const TOKEN_EXPIRY = '7d';
@@ -24,9 +25,10 @@ async function register(req, res) {
     // Accounts start unapproved: no token is issued, and login is refused
     // until an admin approves the account from the Admin page.
     await pool.query(
-      `INSERT INTO users (name, email, password_hash, role, is_approved)
-       VALUES ($1, $2, $3, $4, FALSE)`,
-      [name.trim(), email.trim().toLowerCase(), passwordHash, userRole]
+      `INSERT INTO users (name, email, password_hash, role, is_approved, language)
+       VALUES ($1, $2, $3, $4, FALSE, $5)`,
+      // new accounts start in the language the sign-up page was shown in
+      [name.trim(), email.trim().toLowerCase(), passwordHash, userRole, normalizeLang(req.lang)]
     );
 
     res.status(201).json({
@@ -48,7 +50,7 @@ async function login(req, res) {
 
   try {
     const result = await pool.query(
-      'SELECT id, name, email, password_hash, role, is_approved FROM users WHERE LOWER(email) = LOWER($1)',
+      'SELECT id, name, email, password_hash, role, is_approved, language FROM users WHERE LOWER(email) = LOWER($1)',
       [email.trim()]
     );
 
@@ -79,7 +81,7 @@ async function login(req, res) {
     );
 
     res.json({
-      user: { id: user.id, name: user.name, email: user.email, role: user.role },
+      user: { id: user.id, name: user.name, email: user.email, role: user.role, language: user.language },
       token,
     });
   } catch (err) {
@@ -98,12 +100,35 @@ async function updateProfile(req, res) {
   try {
     const result = await pool.query(
       `UPDATE users SET name = $1 WHERE id = $2
-       RETURNING id, name, email, role, created_at`,
+       RETURNING id, name, email, role, language, created_at`,
       [name.trim(), req.user.id]
     );
     res.json(result.rows[0]);
   } catch (err) {
     console.error('Update profile error:', err.message);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+// PATCH /auth/me/language — save the interface language ('th' | 'en'); it is
+// also the language this user's notifications and LINE messages are written in
+async function updateLanguage(req, res) {
+  const { language } = req.body;
+  if (!LANGS.includes(language)) {
+    return res.status(400).json({ message: 'language must be "th" or "en"' });
+  }
+
+  try {
+    const result = await pool.query(
+      'UPDATE users SET language = $1 WHERE id = $2 RETURNING language',
+      [language, req.user.id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    res.json({ language: result.rows[0].language });
+  } catch (err) {
+    console.error('Update language error:', err.message);
     res.status(500).json({ message: 'Internal server error' });
   }
 }
@@ -138,4 +163,4 @@ async function changePassword(req, res) {
   }
 }
 
-module.exports = { register, login, updateProfile, changePassword };
+module.exports = { register, login, updateProfile, updateLanguage, changePassword };
