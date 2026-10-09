@@ -10,22 +10,15 @@ import {
 } from '../utils/notificationSound';
 import styles from './notificationBell.module.css';
 import { notificationMeta } from '../utils/notificationTypes';
+import { timeAgo } from '../utils/dateTime';
+import { useLang } from '../context/LanguageContext';
 
 // New notifications arrive instantly over the socket (see below); this slow
 // poll is only a safety net in case the live connection is down.
 const POLL_INTERVAL_MS = 30000;
 
-function timeAgo(dateStr) {
-  const diffMs = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diffMs / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
-}
-
 export default function NotificationBell() {
+  const { t } = useLang();
   const [notifications, setNotifications] = useState([]);
   const [open, setOpen] = useState(false);
   const [soundOn, setSoundOn] = useState(isSoundEnabled);
@@ -124,7 +117,7 @@ export default function NotificationBell() {
 
   return (
     <div className={styles.bellWrap} ref={wrapRef}>
-      <button className={styles.bellBtn} onClick={() => setOpen((v) => !v)} aria-label="Notifications">
+      <button className={styles.bellBtn} onClick={() => setOpen((v) => !v)} aria-label={t('bell.title')}>
         🔔
         {unreadCount > 0 && (
           <span className={styles.badge}>{unreadCount > 9 ? '9+' : unreadCount}</span>
@@ -134,18 +127,18 @@ export default function NotificationBell() {
       {open && (
         <div className={styles.dropdown}>
           <div className={styles.dropdownHeader}>
-            <span className={styles.dropdownTitle}>Notifications</span>
+            <span className={styles.dropdownTitle}>{t('bell.title')}</span>
             <span className={styles.headerActions}>
               {unreadCount > 0 && (
                 <button className={styles.markAllBtn} onClick={handleMarkAllRead}>
-                  Mark all read
+                  {t('bell.markAll')}
                 </button>
               )}
               <button
                 className={styles.soundBtn}
                 onClick={toggleSound}
-                title={soundOn ? 'Sound on — click to mute' : 'Sound off — click to turn on'}
-                aria-label={soundOn ? 'Mute notification sounds' : 'Turn on notification sounds'}
+                title={soundOn ? t('bell.soundOnHint') : t('bell.soundOffHint')}
+                aria-label={soundOn ? t('bell.mute') : t('bell.unmute')}
               >
                 {soundOn ? '🔊' : '🔇'}
               </button>
@@ -153,7 +146,7 @@ export default function NotificationBell() {
           </div>
 
           {notifications.length === 0 ? (
-            <div className={styles.empty}>You're all caught up.</div>
+            <div className={styles.empty}>{t('home.caughtUp')}</div>
           ) : (
             notifications.map((n) => (
               <button

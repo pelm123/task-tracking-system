@@ -12,21 +12,21 @@ import EditProjectModal from '../components/EditProjectModal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { isOverdue } from '../utils/dueDate';
 import { formatDateTime } from '../utils/dateTime';
+import { t as tr, getLocale } from '../i18n';
 import styles from './admin.module.css';
 
-const STATUS_LABELS = { todo: 'To Do', in_progress: 'In Progress', review: 'Review', done: 'Done' };
+const STATUS_KEYS = ['todo', 'in_progress', 'review', 'done'];
+const PRIORITY_KEYS = ['low', 'medium', 'high'];
 const STATUS_COLORS = {
   todo: 'var(--status-todo)',
   in_progress: 'var(--status-in-progress)',
   review: 'var(--status-review)',
   done: 'var(--status-done)',
 };
-const PRIORITY_LABELS = { low: 'Low', medium: 'Medium', high: 'High' };
-const ROLE_LABELS = { admin: 'Admin', pm: 'PM', member: 'Member' };
 
 function formatDate(dateStr) {
   if (!dateStr) return '—';
-  return new Date(dateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  return new Date(dateStr).toLocaleDateString(getLocale(), { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 function initials(name) {
@@ -100,7 +100,7 @@ export default function AdminPage() {
         setPending(p);
         if (p.length > 0) setTab('users'); // land on the approval queue first
       })
-      .catch(() => setError('Could not load admin data.'))
+      .catch(() => setError(tr('admin.loadFail')))
       .finally(() => setLoading(false));
   }, []);
 
@@ -200,14 +200,14 @@ export default function AdminPage() {
   async function handleCreateProject(payload) {
     await projectsApi.createProject(payload);
     await refreshProjects();
-    flash('Project created.');
+    flash(tr('admin.projectCreated'));
   }
 
   async function handleSaveProject(id, payload) {
     await projectsApi.updateProject(id, payload);
     await refreshProjects();
     await reloadTasks(); // task rows show the project name
-    flash('Project saved.');
+    flash(tr('admin.projectSaved'));
   }
 
   async function handleDeleteProject(id) {
@@ -216,7 +216,7 @@ export default function AdminPage() {
     setSelectedIds([]);
     if (projectFilter === id) setProjectFilter('');
     await refreshProjects();
-    flash('Project deleted.');
+    flash(tr('admin.projectDeleted'));
   }
 
   function viewProjectTasks(projectId) {
@@ -239,16 +239,16 @@ export default function AdminPage() {
       setOpenTask((prev) => (prev && prev.id === taskId ? updated : prev));
       setError('');
     } catch (err) {
-      setError(err.response?.data?.message || 'Could not approve that task.');
+      setError(err.response?.data?.message || tr('home.approveFail'));
     }
   }
 
   async function handleDenyTask(taskId) {
     const isReopen = tasks.find((t) => t.id === taskId)?.status === 'done';
-    let reason = window.prompt('Comment explaining why this task is being sent back to To Do (required):', '');
+    let reason = window.prompt(tr('home.promptSendBack'), '');
     if (reason === null) return;
     while (!reason.trim()) {
-      reason = window.prompt(`A comment is required to ${isReopen ? 'reopen' : 'deny'} a task. Please explain:`, '');
+      reason = window.prompt(tr(isReopen ? 'home.promptRequiredReopen' : 'home.promptRequiredDeny'), '');
       if (reason === null) return;
     }
     try {
@@ -257,7 +257,7 @@ export default function AdminPage() {
       setOpenTask((prev) => (prev && prev.id === taskId ? updated : prev));
       setError('');
     } catch (err) {
-      setError(err.response?.data?.message || 'Could not send that task back.');
+      setError(err.response?.data?.message || tr('admin.sendBackFail'));
     }
   }
 
@@ -265,7 +265,7 @@ export default function AdminPage() {
     const created = await tasksApi.createTask({ ...payload, project_id: newTaskProjectId });
     setTasks((prev) => [created, ...prev.filter((t) => t.id !== created.id)]);
     refreshProjects(); // keeps the per-project task counts fresh
-    flash('Task created.');
+    flash(tr('admin.taskCreated'));
   }
 
   function toggleSelect(id) {
@@ -279,7 +279,7 @@ export default function AdminPage() {
       setSelectedIds([]);
       setError('');
     } catch (err) {
-      setError(err.response?.data?.message || 'Could not move those tasks.');
+      setError(err.response?.data?.message || tr('admin.moveFail'));
     }
   }
 
@@ -290,7 +290,7 @@ export default function AdminPage() {
       setSelectedIds([]);
       setError('');
     } catch (err) {
-      setError(err.response?.data?.message || 'Could not assign those tasks.');
+      setError(err.response?.data?.message || tr('admin.assignFail'));
     }
   }
 
@@ -310,7 +310,7 @@ export default function AdminPage() {
       setTimeout(() => setSavedUserId((current) => (current === userId ? null : current)), 1500);
       setError('');
     } catch (err) {
-      setError(err.response?.data?.message || 'Could not update role.');
+      setError(err.response?.data?.message || tr('admin.roleFail'));
     }
   }
 
@@ -321,9 +321,9 @@ export default function AdminPage() {
       setPending((prev) => prev.filter((p) => p.id !== person.id));
       setUsers((prev) => [...prev, approved].sort((a, b) => a.name.localeCompare(b.name)));
       setError('');
-      flash(`${person.name} can now log in.`);
+      flash(tr('admin.canLogin', { name: person.name }));
     } catch (err) {
-      setError(err.response?.data?.message || 'Could not approve that account.');
+      setError(err.response?.data?.message || tr('admin.approveAccountFail'));
     } finally {
       setBusyId(null);
     }
@@ -331,9 +331,7 @@ export default function AdminPage() {
 
   async function handleReject(person) {
     if (
-      !window.confirm(
-        `Reject and remove the sign-up from ${person.name} (${person.email})? They can sign up again later.`
-      )
+      !window.confirm(tr('admin.rejectConfirm', { name: person.name, email: person.email }))
     )
       return;
     setBusyId(person.id);
@@ -342,7 +340,7 @@ export default function AdminPage() {
       setPending((prev) => prev.filter((p) => p.id !== person.id));
       setError('');
     } catch (err) {
-      setError(err.response?.data?.message || 'Could not reject that sign-up.');
+      setError(err.response?.data?.message || tr('admin.rejectFail'));
     } finally {
       setBusyId(null);
     }
@@ -372,28 +370,37 @@ export default function AdminPage() {
   async function handleResetPassword(e) {
     e.preventDefault();
     if (resetPassword.length < 6) {
-      setResetError('Use at least 6 characters.');
+      setResetError(tr('admin.pwMin'));
       return;
     }
     setResetBusy(true);
     try {
       await usersApi.resetUserPassword(resetTarget.id, resetPassword);
-      flash(`Password updated for ${resetTarget.name}. Share it with them privately.`);
+      flash(tr('admin.pwUpdated', { name: resetTarget.name }));
       setResetTarget(null);
     } catch (err) {
-      setResetError(err.response?.data?.message || 'Could not reset the password.');
+      setResetError(err.response?.data?.message || tr('admin.resetFail'));
     } finally {
       setResetBusy(false);
     }
   }
 
   function exportTasksCsv() {
-    const header = ['Title', 'Project', 'Status', 'Priority', 'Assignees', 'Created by', 'Due', 'Created'];
+    const header = [
+      tr('modal.title'),
+      tr('admin.colProject'),
+      tr('list.status'),
+      tr('list.priority'),
+      tr('list.assignees'),
+      tr('admin.colCreatedBy'),
+      tr('list.due'),
+      tr('admin.colCreated'),
+    ];
     const rows = filteredTasks.map((t) => [
       t.title,
       t.project_name,
-      STATUS_LABELS[t.status],
-      PRIORITY_LABELS[t.priority] || t.priority,
+      tr(`status.${t.status}`),
+      tr(`priority.${t.priority}`),
       (t.assignees || []).map((a) => a.name).join('; '),
       t.creator_name,
       t.due_date ? formatDateTime(t.due_date) : '',
@@ -413,18 +420,18 @@ export default function AdminPage() {
   }
 
   if (loading) {
-    return <div className={styles.adminScreen}>Loading admin data…</div>;
+    return <div className={styles.adminScreen}>{tr('admin.loading')}</div>;
   }
 
   const tasksCreatedBy = (userId) => tasks.filter((t) => t.created_by === userId).length;
 
   return (
     <div className={styles.adminScreen}>
-      <h1>Admin</h1>
+      <h1>{tr('nav.admin')}</h1>
       <p className={styles.subLine}>
         {isAdmin
-          ? 'Manage every user, project and task in one place.'
-          : 'Manage projects and tasks across the team. User accounts and roles are managed by admins.'}
+          ? tr('admin.subAdmin')
+          : tr('admin.subPm')}
       </p>
 
       {error && <p style={{ color: 'var(--priority-high)', marginBottom: 16 }}>{error}</p>}
@@ -436,21 +443,21 @@ export default function AdminPage() {
             className={`${styles.tabBtn} ${tab === 'users' ? styles.tabBtnActive : ''}`}
             onClick={() => setTab('users')}
           >
-            Users <span className={styles.muted}>({users.length})</span>
-            {pending.length > 0 && <span className={styles.pendingBadge}>{pending.length} new</span>}
+            {tr('admin.tabUsers')} <span className={styles.muted}>({users.length})</span>
+            {pending.length > 0 && <span className={styles.pendingBadge}>{tr('admin.newN', { n: pending.length })}</span>}
           </button>
         )}
         <button
           className={`${styles.tabBtn} ${tab === 'projects' ? styles.tabBtnActive : ''}`}
           onClick={() => setTab('projects')}
         >
-          Projects <span className={styles.muted}>({projects.length})</span>
+          {tr('home.projects')} <span className={styles.muted}>({projects.length})</span>
         </button>
         <button
           className={`${styles.tabBtn} ${tab === 'tasks' ? styles.tabBtnActive : ''}`}
           onClick={() => setTab('tasks')}
         >
-          Tasks <span className={styles.muted}>({tasks.length})</span>
+          {tr('admin.tabTasks')} <span className={styles.muted}>({tasks.length})</span>
         </button>
       </div>
 
@@ -460,32 +467,30 @@ export default function AdminPage() {
           <div className={styles.summaryRow}>
             <div className={styles.summaryCard}>
               <span className={styles.summaryValue}>{users.length}</span>
-              <span className={styles.summaryLabel}>Active users</span>
+              <span className={styles.summaryLabel}>{tr('admin.activeUsers')}</span>
             </div>
             <div className={styles.summaryCard}>
               <span className={styles.summaryValue}>{roleCounts.admin}</span>
-              <span className={styles.summaryLabel}>Admins</span>
+              <span className={styles.summaryLabel}>{tr('admin.admins')}</span>
             </div>
             <div className={styles.summaryCard}>
               <span className={styles.summaryValue}>{roleCounts.pm}</span>
-              <span className={styles.summaryLabel}>PMs</span>
+              <span className={styles.summaryLabel}>{tr('admin.pms')}</span>
             </div>
             <div className={styles.summaryCard}>
               <span className={styles.summaryValue}>{roleCounts.member}</span>
-              <span className={styles.summaryLabel}>Members</span>
+              <span className={styles.summaryLabel}>{tr('admin.members')}</span>
             </div>
             <div className={`${styles.summaryCard} ${pending.length > 0 ? styles.summaryCardWarn : ''}`}>
               <span className={styles.summaryValue}>{pending.length}</span>
-              <span className={styles.summaryLabel}>Awaiting approval</span>
+              <span className={styles.summaryLabel}>{tr('admin.awaitingApproval')}</span>
             </div>
           </div>
 
           {pending.length > 0 && (
             <div className={styles.pendingBox}>
-              <p className={styles.pendingTitle}>Waiting for approval ({pending.length})</p>
-              <p className={styles.pendingHint}>
-                These people have signed up but can't log in until you approve them.
-              </p>
+              <p className={styles.pendingTitle}>{tr('admin.waitingTitle', { count: pending.length })}</p>
+              <p className={styles.pendingHint}>{tr('admin.waitingHint')}</p>
               <div className={styles.pendingList}>
                 {pending.map((p) => (
                   <div key={p.id} className={styles.pendingRow}>
@@ -493,14 +498,14 @@ export default function AdminPage() {
                     <div className={styles.pendingWho}>
                       <span className={styles.pendingName}>{p.name}</span>
                       <span className={styles.muted}>
-                        {p.email} · asked for {p.role === 'pm' ? 'PM' : 'Member'} · {formatDate(p.created_at)}
+                        {tr('admin.askedFor', { email: p.email, role: p.role === 'pm' ? tr('admin.rolePm') : tr('admin.roleMember'), date: formatDate(p.created_at) })}
                       </span>
                     </div>
                     <button className="btn btn-danger" disabled={busyId === p.id} onClick={() => handleReject(p)}>
-                      Reject
+                      {tr('admin.reject')}
                     </button>
                     <button className="btn btn-primary" disabled={busyId === p.id} onClick={() => handleApprove(p)}>
-                      {busyId === p.id ? 'Working…' : 'Approve'}
+                      {busyId === p.id ? tr('confirm.working') : tr('admin.approve')}
                     </button>
                   </div>
                 ))}
@@ -511,15 +516,15 @@ export default function AdminPage() {
           <div className={styles.filterRow}>
             <input
               className={styles.searchInput}
-              placeholder="Search name or email…"
+              placeholder={tr('admin.searchUsers')}
               value={userSearch}
               onChange={(e) => setUserSearch(e.target.value)}
             />
             <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
-              <option value="">All roles</option>
-              <option value="admin">Admins</option>
-              <option value="pm">PMs</option>
-              <option value="member">Members</option>
+              <option value="">{tr('admin.allRoles')}</option>
+              <option value="admin">{tr('admin.admins')}</option>
+              <option value="pm">{tr('admin.pms')}</option>
+              <option value="member">{tr('admin.members')}</option>
             </select>
             {(userSearch || roleFilter) && (
               <button
@@ -529,11 +534,11 @@ export default function AdminPage() {
                   setRoleFilter('');
                 }}
               >
-                Clear
+                {tr('admin.clear')}
               </button>
             )}
             <span className={styles.resultCount}>
-              {filteredUsers.length} of {users.length}
+              {tr('admin.ofTotal', { shown: filteredUsers.length, total: users.length })}
             </span>
           </div>
 
@@ -541,11 +546,11 @@ export default function AdminPage() {
             <table className={styles.table}>
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Email</th>
-                  <th>Role</th>
-                  <th>Open tasks</th>
-                  <th>Joined</th>
+                  <th>{tr('auth.name')}</th>
+                  <th>{tr('auth.email')}</th>
+                  <th>{tr('auth.role')}</th>
+                  <th>{tr('admin.openTasks')}</th>
+                  <th>{tr('admin.joined')}</th>
                   <th></th>
                 </tr>
               </thead>
@@ -553,7 +558,7 @@ export default function AdminPage() {
                 {filteredUsers.length === 0 && (
                   <tr>
                     <td colSpan={6} className={styles.emptyRow}>
-                      {users.length === 0 ? 'No users yet.' : 'No users match your search.'}
+                      {users.length === 0 ? tr('admin.noUsers') : tr('admin.noUsersMatch')}
                     </td>
                   </tr>
                 )}
@@ -566,7 +571,7 @@ export default function AdminPage() {
                         <div className={styles.userCell}>
                           <span className={styles.avatar}>{initials(u.name)}</span>
                           {u.name}
-                          {isSelf && <span className={styles.youTag}>You</span>}
+                          {isSelf && <span className={styles.youTag}>{tr('admin.you')}</span>}
                         </div>
                       </td>
                       <td className={styles.muted}>{u.email}</td>
@@ -575,22 +580,22 @@ export default function AdminPage() {
                           className={styles.roleSelect}
                           value={u.role}
                           disabled={isSelf}
-                          title={isSelf ? "You can't change your own role" : undefined}
+                          title={isSelf ? tr('admin.selfRole') : undefined}
                           onChange={(e) => handleRoleChange(u.id, e.target.value)}
                         >
-                          <option value="member">Member</option>
-                          <option value="pm">PM</option>
-                          <option value="admin">Admin</option>
+                          <option value="member">{tr('admin.roleMember')}</option>
+                          <option value="pm">{tr('admin.rolePm')}</option>
+                          <option value="admin">{tr('admin.roleAdmin')}</option>
                         </select>
                         {savedUserId === u.id && (
-                          <span style={{ marginLeft: 8, color: 'var(--status-done)', fontSize: 12 }}>✓ Saved</span>
+                          <span style={{ marginLeft: 8, color: 'var(--status-done)', fontSize: 12 }}>{tr('admin.savedTick')}</span>
                         )}
                       </td>
                       <td className={styles.muted}>
                         {load ? (
                           <>
                             {load.open}
-                            {load.overdue > 0 && <span className={styles.overdueText}> · {load.overdue} overdue</span>}
+                            {load.overdue > 0 && <span className={styles.overdueText}> · {tr('board.overdueCount', { n: load.overdue })}</span>}
                           </>
                         ) : (
                           '—'
@@ -599,11 +604,11 @@ export default function AdminPage() {
                       <td className={styles.muted}>{formatDate(u.created_at)}</td>
                       <td className={styles.rowActions}>
                         <button className="btn btn-secondary" onClick={() => openReset(u)}>
-                          Reset password
+                          {tr('admin.resetPassword')}
                         </button>
                         {!isSelf && (
                           <button className="btn btn-danger" onClick={() => setDeleteUserTarget(u)}>
-                            Delete
+                            {tr('common.delete')}
                           </button>
                         )}
                       </td>
@@ -621,10 +626,10 @@ export default function AdminPage() {
         <>
           <div className={styles.filterRow}>
             <span className={styles.resultCount} style={{ marginLeft: 0 }}>
-              {projects.length} project{projects.length === 1 ? '' : 's'}
+              {tr('admin.projectCount', { count: projects.length })}
             </span>
             <button className="btn btn-primary" style={{ marginLeft: 'auto' }} onClick={() => setShowNewProject(true)}>
-              + New project
+              {tr('home.newProject')}
             </button>
           </div>
 
@@ -632,11 +637,11 @@ export default function AdminPage() {
             <table className={styles.table}>
               <thead>
                 <tr>
-                  <th>Project</th>
-                  <th>Progress</th>
-                  <th>Tasks</th>
-                  <th>Overdue</th>
-                  <th>Created</th>
+                  <th>{tr('admin.colProject')}</th>
+                  <th>{tr('admin.progress')}</th>
+                  <th>{tr('admin.tabTasks')}</th>
+                  <th>{tr('home.statOverdue')}</th>
+                  <th>{tr('admin.colCreated')}</th>
                   <th></th>
                 </tr>
               </thead>
@@ -644,7 +649,7 @@ export default function AdminPage() {
                 {projects.length === 0 && (
                   <tr>
                     <td colSpan={6} className={styles.emptyRow}>
-                      No projects yet.
+                      {tr('calendar.noProjects')}
                     </td>
                   </tr>
                 )}
@@ -668,7 +673,7 @@ export default function AdminPage() {
                           <div className={styles.progressFill} style={{ width: `${pct}%`, background: color }} />
                         </div>
                         <span className={styles.muted} style={{ fontSize: 11 }}>
-                          {stats.done}/{stats.total} done · {pct}%
+                          {tr('home.doneOf', { done: stats.done, total: stats.total })} · {pct}%
                         </span>
                       </td>
                       <td className={styles.muted}>{stats.total}</td>
@@ -678,13 +683,13 @@ export default function AdminPage() {
                       <td className={styles.muted}>{formatDate(p.created_at)}</td>
                       <td className={styles.rowActions}>
                         <button className="btn btn-secondary" onClick={() => viewProjectTasks(p.id)}>
-                          View tasks
+                          {tr('admin.viewTasks')}
                         </button>
                         <button className="btn btn-secondary" onClick={() => setEditProject(p)}>
-                          Edit
+                          {tr('common.edit')}
                         </button>
                         <button className="btn btn-danger" onClick={() => setDeleteProjectTarget(p)}>
-                          Delete
+                          {tr('common.delete')}
                         </button>
                       </td>
                     </tr>
@@ -702,12 +707,12 @@ export default function AdminPage() {
           <div className={styles.filterRow}>
             <input
               className={styles.searchInput}
-              placeholder="Search tasks…"
+              placeholder={tr('board.searchPlaceholder')}
               value={taskSearch}
               onChange={(e) => setTaskSearch(e.target.value)}
             />
             <select value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)}>
-              <option value="">All projects</option>
+              <option value="">{tr('calendar.allProjects')}</option>
               {projectOptions.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
@@ -715,24 +720,24 @@ export default function AdminPage() {
               ))}
             </select>
             <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-              <option value="">All statuses</option>
-              {Object.entries(STATUS_LABELS).map(([value, label]) => (
+              <option value="">{tr('admin.allStatuses')}</option>
+              {STATUS_KEYS.map((value) => (
                 <option key={value} value={value}>
-                  {label}
+                  {tr(`status.${value}`)}
                 </option>
               ))}
             </select>
             <select value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)}>
-              <option value="">All priorities</option>
-              {Object.entries(PRIORITY_LABELS).map(([value, label]) => (
+              <option value="">{tr('board.allPriorities')}</option>
+              {PRIORITY_KEYS.map((value) => (
                 <option key={value} value={value}>
-                  {label}
+                  {tr(`priority.${value}`)}
                 </option>
               ))}
             </select>
             <select value={assigneeFilter} onChange={(e) => setAssigneeFilter(e.target.value)}>
-              <option value="">All assignees</option>
-              <option value="__none__">Unassigned</option>
+              <option value="">{tr('board.allAssignees')}</option>
+              <option value="__none__">{tr('list.unassigned')}</option>
               {users.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.name}
@@ -743,15 +748,15 @@ export default function AdminPage() {
               className={`btn ${overdueOnly ? 'btn-active' : 'btn-secondary'}`}
               onClick={() => setOverdueOnly((v) => !v)}
             >
-              ⚠ Overdue only
+              ⚠ {tr('admin.overdueOnly')}
             </button>
             {tasksFiltered && (
               <button className="btn btn-ghost" onClick={clearTaskFilters}>
-                Clear
+                {tr('admin.clear')}
               </button>
             )}
             <span className={styles.resultCount}>
-              {filteredTasks.length} of {tasks.length}
+              {tr('admin.ofTotal', { shown: filteredTasks.length, total: tasks.length })}
             </span>
             <button
               className="btn btn-primary"
@@ -761,47 +766,47 @@ export default function AdminPage() {
               }}
               disabled={projects.length === 0}
             >
-              + New task
+              + {tr('board.newTask')}
             </button>
             <button
               className="btn btn-secondary"
               onClick={exportTasksCsv}
               disabled={filteredTasks.length === 0}
-              title="Download the tasks shown here as a CSV file (opens in Excel)"
+              title={tr('admin.exportHint')}
             >
-              ⬇ Export CSV
+              ⬇ {tr('admin.exportCsv')}
             </button>
           </div>
 
           {selectedIds.length > 0 && (
             <div className={styles.bulkBar}>
-              <strong>{selectedIds.length} selected</strong>
+              <strong>{tr('board.selected', { n: selectedIds.length })}</strong>
               <select onChange={(e) => e.target.value && handleBulkStatus(e.target.value)} value="">
                 <option value="" disabled>
-                  Move to…
+                  {tr('board.moveTo')}
                 </option>
-                {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                {STATUS_KEYS.map((value) => (
                   <option key={value} value={value}>
-                    {label}
+                    {tr(`status.${value}`)}
                   </option>
                 ))}
               </select>
               <select onChange={(e) => e.target.value && handleBulkAssign(e.target.value)} value="">
                 <option value="" disabled>
-                  Add assignee…
+                  {tr('board.addAssignee')}
                 </option>
                 {users.map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.name}
                   </option>
                 ))}
-                <option value="__clear__">— Remove all assignees —</option>
+                <option value="__clear__">{tr('admin.removeAssignees')}</option>
               </select>
               <button className="btn btn-danger" onClick={() => setBulkDeleteOpen(true)}>
-                Delete selected
+                {tr('board.deleteSelected')}
               </button>
               <button className="btn btn-ghost" onClick={() => setSelectedIds([])}>
-                Clear selection
+                {tr('list.clearSelection')}
               </button>
             </div>
           )}
@@ -813,20 +818,20 @@ export default function AdminPage() {
                   <th className={styles.checkCol}>
                     <input
                       type="checkbox"
-                      aria-label="Select all shown"
+                      aria-label={tr('admin.selectAllShown')}
                       checked={filteredTasks.length > 0 && filteredTasks.every((t) => selectedIds.includes(t.id))}
                       onChange={(e) =>
                         setSelectedIds(e.target.checked ? filteredTasks.map((t) => t.id) : [])
                       }
                     />
                   </th>
-                  <th>Title</th>
-                  <th>Project</th>
-                  <th>Status</th>
-                  <th>Priority</th>
-                  <th>Assignee</th>
-                  <th>Created by</th>
-                  <th>Due</th>
+                  <th>{tr('modal.title')}</th>
+                  <th>{tr('admin.colProject')}</th>
+                  <th>{tr('list.status')}</th>
+                  <th>{tr('list.priority')}</th>
+                  <th>{tr('admin.colAssignee')}</th>
+                  <th>{tr('admin.colCreatedBy')}</th>
+                  <th>{tr('list.due')}</th>
                   <th></th>
                 </tr>
               </thead>
@@ -834,7 +839,7 @@ export default function AdminPage() {
                 {filteredTasks.length === 0 && (
                   <tr>
                     <td colSpan={9} className={styles.emptyRow}>
-                      {tasks.length === 0 ? 'No tasks yet.' : 'No tasks match your filters.'}
+                      {tasks.length === 0 ? tr('admin.noTasks') : tr('list.noMatch')}
                     </td>
                   </tr>
                 )}
@@ -845,13 +850,13 @@ export default function AdminPage() {
                       <td className={styles.checkCol}>
                         <input
                           type="checkbox"
-                          aria-label={`Select ${t.title}`}
+                          aria-label={tr('list.selectRow', { title: t.title })}
                           checked={selectedIds.includes(t.id)}
                           onChange={() => toggleSelect(t.id)}
                         />
                       </td>
                       <td className={styles.titleCell}>
-                        <button className={styles.titleLink} onClick={() => setOpenTask(t)} title="Open and edit this task">
+                        <button className={styles.titleLink} onClick={() => setOpenTask(t)} title={tr('admin.openEditHint')}>
                           {t.title}
                         </button>
                       </td>
@@ -861,26 +866,26 @@ export default function AdminPage() {
                       </td>
                       <td>
                         <span className={styles.badge} style={{ color: STATUS_COLORS[t.status] }}>
-                          {STATUS_LABELS[t.status]}
+                          {tr(`status.${t.status}`)}
                         </span>
                       </td>
-                      <td className={styles.muted}>{PRIORITY_LABELS[t.priority] || t.priority}</td>
+                      <td className={styles.muted}>{tr(`priority.${t.priority}`)}</td>
                       <td className={styles.muted}>
                         {t.assignees && t.assignees.length > 0
                           ? t.assignees.map((a) => a.name).join(', ')
-                          : 'Unassigned'}
+                          : tr('list.unassigned')}
                       </td>
                       <td className={styles.muted}>{t.creator_name}</td>
                       <td className={late ? styles.overdueText : styles.muted}>
                         {formatDate(t.due_date)}
-                        {late && ' · overdue'}
+                        {late && ` · ${tr('admin.overdueLower')}`}
                       </td>
                       <td className={styles.rowActions}>
                         <button className="btn btn-secondary" onClick={() => setOpenTask(t)}>
-                          Open
+                          {tr('admin.open')}
                         </button>
                         <button className="btn btn-danger" onClick={() => setDeleteTaskTarget(t)}>
-                          Delete
+                          {tr('common.delete')}
                         </button>
                       </td>
                     </tr>
@@ -905,15 +910,15 @@ export default function AdminPage() {
         const count = (projectStats.get(deleteProjectTarget.id) || { total: 0 }).total;
         return (
           <ConfirmDialog
-            title="Delete project?"
+            title={tr('home.deleteTitle')}
             message={
               count === 0
-                ? `"${deleteProjectTarget.name}" is empty. Delete it?`
-                : `This deletes "${deleteProjectTarget.name}" and its ${count} task${count === 1 ? '' : 's'} for good.`
+                ? tr('home.deleteEmpty', { name: deleteProjectTarget.name })
+                : tr('home.deleteWithTasks', { name: deleteProjectTarget.name, count })
             }
-            confirmLabel="Delete"
+            confirmLabel={tr('common.delete')}
             danger
-            requireText={count === 0 ? undefined : 'delete'}
+            requireText={count === 0 ? undefined : tr('home.deleteWord')}
             onConfirm={() => handleDeleteProject(deleteProjectTarget.id)}
             onClose={() => setDeleteProjectTarget(null)}
           />
@@ -922,11 +927,11 @@ export default function AdminPage() {
 
       {bulkDeleteOpen && (
         <ConfirmDialog
-          title={`Delete ${selectedIds.length} task${selectedIds.length === 1 ? '' : 's'}?`}
-          message="They and their comments and files will be deleted for good."
-          confirmLabel="Delete"
+          title={tr('admin.bulkDeleteTitle', { count: selectedIds.length })}
+          message={tr('admin.bulkDeleteMsg')}
+          confirmLabel={tr('common.delete')}
           danger
-          requireText={selectedIds.length > 3 ? 'delete' : undefined}
+          requireText={selectedIds.length > 3 ? tr('home.deleteWord') : undefined}
           onConfirm={handleBulkDelete}
           onClose={() => setBulkDeleteOpen(false)}
         />
@@ -935,9 +940,9 @@ export default function AdminPage() {
       {pickProjectOpen && (
         <div className={styles.dialogOverlay} onClick={() => setPickProjectOpen(false)}>
           <div className={styles.dialog} onClick={(e) => e.stopPropagation()}>
-            <h2 className={styles.dialogTitle}>New task</h2>
+            <h2 className={styles.dialogTitle}>{tr('board.newTask')}</h2>
             <label className={styles.dialogLabel}>
-              Which project is it for?
+              {tr('admin.whichProject')}
               <select value={pickedProjectId} onChange={(e) => setPickedProjectId(e.target.value)}>
                 {projects.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -948,7 +953,7 @@ export default function AdminPage() {
             </label>
             <div className={styles.dialogActions}>
               <button className="btn btn-ghost" onClick={() => setPickProjectOpen(false)}>
-                Cancel
+                {tr('common.cancel')}
               </button>
               <button
                 className="btn btn-primary"
@@ -958,7 +963,7 @@ export default function AdminPage() {
                   setPickProjectOpen(false);
                 }}
               >
-                Continue
+                {tr('admin.continue')}
               </button>
             </div>
           </div>
@@ -984,18 +989,16 @@ export default function AdminPage() {
 
       {deleteUserTarget && (
         <ConfirmDialog
-          title="Delete user?"
+          title={tr('admin.deleteUserTitle')}
           message={(() => {
             const created = tasksCreatedBy(deleteUserTarget.id);
-            return `This removes ${deleteUserTarget.name} (${deleteUserTarget.email}) for good${
-              created > 0
-                ? `, along with the ${created} task${created === 1 ? '' : 's'} they created`
-                : ''
-            }.`;
+            return created > 0
+              ? tr('admin.deleteUserWithTasks', { name: deleteUserTarget.name, email: deleteUserTarget.email, count: created })
+              : tr('admin.deleteUser', { name: deleteUserTarget.name, email: deleteUserTarget.email });
           })()}
-          confirmLabel="Delete"
+          confirmLabel={tr('common.delete')}
           danger
-          requireText="delete"
+          requireText={tr('home.deleteWord')}
           onConfirm={() => handleDeleteUser(deleteUserTarget.id)}
           onClose={() => setDeleteUserTarget(null)}
         />
@@ -1003,9 +1006,9 @@ export default function AdminPage() {
 
       {deleteTaskTarget && (
         <ConfirmDialog
-          title="Delete task?"
-          message={`"${deleteTaskTarget.title}" and its comments and files will be deleted for good.`}
-          confirmLabel="Delete"
+          title={tr('admin.deleteTaskTitle')}
+          message={tr('admin.deleteTaskMsg', { title: deleteTaskTarget.title })}
+          confirmLabel={tr('common.delete')}
           danger
           onConfirm={() => handleDeleteTask(deleteTaskTarget.id)}
           onClose={() => setDeleteTaskTarget(null)}
@@ -1015,18 +1018,18 @@ export default function AdminPage() {
       {resetTarget && (
         <div className={styles.dialogOverlay} onClick={() => !resetBusy && setResetTarget(null)}>
           <form className={styles.dialog} onClick={(e) => e.stopPropagation()} onSubmit={handleResetPassword}>
-            <h2 className={styles.dialogTitle}>Reset password</h2>
+            <h2 className={styles.dialogTitle}>{tr('admin.resetPassword')}</h2>
             <p className={styles.dialogText}>
-              Set a new password for <strong>{resetTarget.name}</strong> ({resetTarget.email}). Their current password
-              stops working immediately — tell them the new one privately.
+              {tr('admin.resetIntroBefore')}
+              <strong>{resetTarget.name}</strong> ({resetTarget.email}){tr('admin.resetIntroAfter')}
             </p>
             <label className={styles.dialogLabel}>
-              New password
+              {tr('profile.newPw')}
               <input
                 type="text"
                 value={resetPassword}
                 onChange={(e) => setResetPassword(e.target.value)}
-                placeholder="At least 6 characters"
+                placeholder={tr('admin.pwPlaceholder')}
                 autoComplete="off"
                 autoFocus
               />
@@ -1034,10 +1037,10 @@ export default function AdminPage() {
             {resetError && <p className={styles.dialogError}>{resetError}</p>}
             <div className={styles.dialogActions}>
               <button type="button" className="btn btn-ghost" onClick={() => setResetTarget(null)} disabled={resetBusy}>
-                Cancel
+                {tr('common.cancel')}
               </button>
               <button type="submit" className="btn btn-primary" disabled={resetBusy || resetPassword.length < 6}>
-                {resetBusy ? 'Saving…' : 'Set password'}
+                {resetBusy ? tr('modal.saving') : tr('admin.setPassword')}
               </button>
             </div>
           </form>

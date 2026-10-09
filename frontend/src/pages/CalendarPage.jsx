@@ -5,6 +5,8 @@ import * as usersApi from '../api/users';
 import TaskDetailModal from '../components/TaskDetailModal';
 import styles from './calendar.module.css';
 import { colorForProject } from '../utils/projectColor';
+import ProjectSwitcher from '../components/ProjectSwitcher';
+import { t as tr, getLocale } from '../i18n';
 
 const PRIORITY_COLORS = {
   low: 'var(--priority-low)',
@@ -12,7 +14,12 @@ const PRIORITY_COLORS = {
   high: 'var(--priority-high)',
 };
 
-const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+// Sun..Sat in the current language (2024-01-07 was a Sunday)
+function weekdayLabels() {
+  return Array.from({ length: 7 }, (_, i) =>
+    new Date(2024, 0, 7 + i).toLocaleDateString(getLocale(), { weekday: 'short' })
+  );
+}
 
 function toDateKey(date) {
   // local-time Y-M-D key, so this lines up with how <input type="date"> values compare
@@ -49,11 +56,11 @@ function buildMonthGrid(monthDate) {
 }
 
 function formatMonthLabel(date) {
-  return date.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  return date.toLocaleDateString(getLocale(), { month: 'long', year: 'numeric' });
 }
 
 function formatShortDate(dateStr) {
-  return new Date(dateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  return new Date(dateStr).toLocaleDateString(getLocale(), { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
 const ALL_PROJECTS = 'all';
@@ -67,6 +74,7 @@ export default function CalendarPage() {
   const [tasks, setTasks] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [legendOpen, setLegendOpen] = useState(false);
   const [error, setError] = useState('');
   const [monthCursor, setMonthCursor] = useState(startOfMonth(new Date()));
   const [rangeStart, setRangeStart] = useState('');
@@ -90,7 +98,7 @@ export default function CalendarPage() {
       const data = await tasksApi.listTasks(showingAllProjects ? {} : { project_id: projectFilter });
       setTasks(data.filter((t) => t.due_date));
     } catch (err) {
-      setError('Could not load tasks. Is the API running?');
+      setError(tr('board.loadFail'));
     } finally {
       setLoading(false);
     }
@@ -174,21 +182,21 @@ export default function CalendarPage() {
   }
 
   if (loading) {
-    return <div className={styles.screen}>Loading calendar…</div>;
+    return <div className={styles.screen}>{tr('calendar.loading')}</div>;
   }
 
   if (projects.length === 0) {
     return (
       <div className={styles.screen}>
-        <h1>Calendar</h1>
-        <p className={styles.subLine}>No projects yet.</p>
+        <h1>{tr('nav.calendar')}</h1>
+        <p className={styles.subLine}>{tr('calendar.noProjects')}</p>
       </div>
     );
   }
 
   const headerTitle = showingAllProjects
-    ? 'All Projects'
-    : projects.find((p) => p.id === projectFilter)?.name || 'Calendar';
+    ? tr('calendar.allProjectsTitle')
+    : projects.find((p) => p.id === projectFilter)?.name || tr('nav.calendar');
 
   return (
     <div className={styles.screen}>
@@ -196,30 +204,35 @@ export default function CalendarPage() {
         <div>
           <h1>{headerTitle}</h1>
           <p className={styles.subLine}>
-            Click a day, then another, to select a range — or set exact dates on the right.
+            {tr('calendar.hint')}
           </p>
         </div>
-        <label className={styles.rangeLabel}>
-          Showing
-          <select value={projectFilter} onChange={(e) => handleProjectFilterChange(e.target.value)}>
-            <option value={ALL_PROJECTS}>All projects</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className={styles.rangeLabel}>
+          {tr('calendar.showing')}
+          <ProjectSwitcher
+            value={projectFilter}
+            onChange={handleProjectFilterChange}
+            allOption={{ value: ALL_PROJECTS, label: tr('calendar.allProjects') }}
+            alignRight
+          />
+        </div>
       </div>
 
-      {showingAllProjects && (
-        <div className={styles.legend}>
-          {projects.map((p) => (
-            <span key={p.id} className={styles.legendItem}>
-              <span className={styles.legendSwatch} style={{ background: colorForProject(p.id) }} />
-              {p.name}
-            </span>
-          ))}
+      {showingAllProjects && projects.length > 0 && (
+        <div className={styles.legendWrap}>
+          <div className={`${styles.legend} ${legendOpen ? '' : styles.legendCollapsed}`}>
+            {projects.map((p) => (
+              <span key={p.id} className={styles.legendItem} title={p.name}>
+                <span className={styles.legendSwatch} style={{ background: colorForProject(p.id) }} />
+                <span className={styles.legendName}>{p.name}</span>
+              </span>
+            ))}
+          </div>
+          {projects.length > 4 && (
+            <button type="button" className={styles.legendToggle} onClick={() => setLegendOpen((v) => !v)}>
+              {legendOpen ? tr('calendar.showLess') : tr('calendar.showAll', { n: projects.length })}
+            </button>
+          )}
         </div>
       )}
 
@@ -235,29 +248,29 @@ export default function CalendarPage() {
             ›
           </button>
           <button className="btn btn-ghost" onClick={() => setMonthCursor(startOfMonth(new Date()))}>
-            Today
+            {tr('home.today')}
           </button>
         </div>
 
         <div className={styles.rangePicker}>
           <label className={styles.rangeLabel}>
-            From
+            {tr('calendar.from')}
             <input type="date" value={rangeStart} onChange={(e) => setRangeStart(e.target.value)} />
           </label>
           <label className={styles.rangeLabel}>
-            To
+            {tr('calendar.to')}
             <input type="date" value={rangeEnd} onChange={(e) => setRangeEnd(e.target.value)} />
           </label>
           {hasRange && (
             <button className="btn btn-ghost" onClick={clearRange}>
-              Clear range
+              {tr('calendar.clearRange')}
             </button>
           )}
         </div>
       </div>
 
       <div className={styles.grid}>
-        {WEEKDAY_LABELS.map((label) => (
+        {weekdayLabels().map((label) => (
           <div key={label} className={styles.weekdayCell}>
             {label}
           </div>
@@ -303,7 +316,7 @@ export default function CalendarPage() {
                     <span className={styles.taskChipText}>{t.title}</span>
                   </div>
                 ))}
-                {overflow > 0 && <div className={styles.taskOverflow}>+{overflow} more</div>}
+                {overflow > 0 && <div className={styles.taskOverflow}>{tr('calendar.more', { n: overflow })}</div>}
               </div>
             </div>
           );
@@ -313,11 +326,13 @@ export default function CalendarPage() {
       {hasRange && (
         <div className={styles.rangeResults}>
           <p className={styles.sectionTitle}>
-            {rangeTasks.length} task{rangeTasks.length === 1 ? '' : 's'} due {rangeStart === rangeEnd ? 'on' : 'between'}{' '}
-            {rangeStart === rangeEnd ? formatShortDate(rangeStart) : `${formatShortDate(rangeStart)} – ${formatShortDate(rangeEnd)}`}
+            {tr(rangeStart === rangeEnd ? 'calendar.dueOn' : 'calendar.dueBetween', {
+              count: rangeTasks.length,
+              range: rangeStart === rangeEnd ? formatShortDate(rangeStart) : `${formatShortDate(rangeStart)} – ${formatShortDate(rangeEnd)}`,
+            })}
           </p>
           {rangeTasks.length === 0 ? (
-            <p className={styles.emptyText}>No tasks due in this range.</p>
+            <p className={styles.emptyText}>{tr('calendar.noneInRange')}</p>
           ) : (
             <div className={styles.rangeList}>
               {rangeTasks.map((t) => (
@@ -338,7 +353,7 @@ export default function CalendarPage() {
                   <span className={styles.rangeMeta}>
                     {t.assignees && t.assignees.length > 0
                       ? t.assignees.map((a) => a.name).join(', ')
-                      : 'Unassigned'}
+                      : tr('list.unassigned')}
                   </span>
                   <span className={styles.rangeMeta}>{formatShortDate(t.due_date)}</span>
                 </div>

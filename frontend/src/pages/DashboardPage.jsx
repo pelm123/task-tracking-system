@@ -17,8 +17,9 @@ import * as projectsApi from '../api/projects';
 import { useProject } from '../context/ProjectContext';
 import styles from './dashboard.module.css';
 import { colorForProject } from '../utils/projectColor';
+import { timeAgo } from '../utils/dateTime';
+import { t as tr, getLocale } from '../i18n';
 
-const STATUS_LABELS = { todo: 'To Do', in_progress: 'In Progress', review: 'Review', done: 'Done' };
 const STATUS_COLORS = {
   todo: '#8b9490',
   in_progress: 'var(--status-in-progress)',
@@ -30,16 +31,6 @@ const PRIORITY_COLORS = { low: '#7c8985', medium: '#c9a63e', high: '#c9603e' };
 const ALL_PROJECTS = 'all';
 const PROJECT_FILTER_STORAGE_KEY = 'dashboardProjectFilter';
 
-function timeAgo(dateStr) {
-  const diffMs = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diffMs / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
-}
-
 // ---- date range helpers (local calendar dates as 'YYYY-MM-DD') ----
 function toDateStr(d) {
   const pad = (n) => String(n).padStart(2, '0');
@@ -49,7 +40,7 @@ function toDateStr(d) {
 const RANGE_PRESETS = [
   {
     key: 'this-month',
-    label: 'This month',
+    labelKey: 'dashboard.thisMonth',
     range: () => {
       const n = new Date();
       return [toDateStr(new Date(n.getFullYear(), n.getMonth(), 1)), toDateStr(new Date(n.getFullYear(), n.getMonth() + 1, 0))];
@@ -57,7 +48,7 @@ const RANGE_PRESETS = [
   },
   {
     key: 'last-month',
-    label: 'Last month',
+    labelKey: 'dashboard.lastMonth',
     range: () => {
       const n = new Date();
       return [toDateStr(new Date(n.getFullYear(), n.getMonth() - 1, 1)), toDateStr(new Date(n.getFullYear(), n.getMonth(), 0))];
@@ -65,7 +56,7 @@ const RANGE_PRESETS = [
   },
   {
     key: 'last-30',
-    label: 'Last 30 days',
+    labelKey: 'dashboard.last30',
     range: () => {
       const n = new Date();
       return [toDateStr(new Date(n.getFullYear(), n.getMonth(), n.getDate() - 29)), toDateStr(n)];
@@ -73,7 +64,7 @@ const RANGE_PRESETS = [
   },
   {
     key: 'last-90',
-    label: 'Last 90 days',
+    labelKey: 'dashboard.last90',
     range: () => {
       const n = new Date();
       return [toDateStr(new Date(n.getFullYear(), n.getMonth(), n.getDate() - 89)), toDateStr(n)];
@@ -81,7 +72,7 @@ const RANGE_PRESETS = [
   },
   {
     key: 'this-year',
-    label: 'This year',
+    labelKey: 'dashboard.thisYear',
     range: () => {
       const n = new Date();
       return [toDateStr(new Date(n.getFullYear(), 0, 1)), toDateStr(new Date(n.getFullYear(), 11, 31))];
@@ -102,6 +93,15 @@ function initialRange() {
   return { from, to };
 }
 
+// "1 Oct 2026 – 31 Oct 2026" from two 'YYYY-MM-DD' strings, in the current language
+function formatRangeLabel(from, to) {
+  const fmt = (str) => {
+    const [y, m, d] = str.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString(getLocale(), { day: 'numeric', month: 'short', year: 'numeric' });
+  };
+  return `${fmt(from)} – ${fmt(to)}`;
+}
+
 function pct(numerator, denominator) {
   if (!denominator) return 0;
   return Math.round((numerator / denominator) * 100);
@@ -112,10 +112,10 @@ function pct(numerator, denominator) {
 function PeriodSection({ title, subtitle, data }) {
   const statusData = Object.entries(data.byStatus).map(([status, count]) => ({
     status,
-    label: STATUS_LABELS[status],
+    label: tr(`status.${status}`),
     count,
   }));
-  const priorityData = Object.entries(data.byPriority).map(([priority, count]) => ({ priority, count }));
+  const priorityData = Object.entries(data.byPriority).map(([priority, count]) => ({ priority, name: tr(`priority.${priority}`), count }));
   const maxProjectTotal = Math.max(1, ...data.byProject.map((p) => p.total));
   const maxAssigneeTotal = Math.max(1, ...data.byAssignee.map((a) => a.total));
 
@@ -129,27 +129,27 @@ function PeriodSection({ title, subtitle, data }) {
       <div className={styles.statCards}>
         <div className={styles.statCard} style={{ '--stat-accent': 'var(--color-accent)' }}>
           <div className={styles.statValue}>{data.totalCreated}</div>
-          <div className={styles.statLabel}>Tasks created</div>
+          <div className={styles.statLabel}>{tr('dashboard.created')}</div>
         </div>
         <div className={styles.statCard} style={{ '--stat-accent': 'var(--status-done)' }}>
           <div className={styles.statValue}>{data.totalCompleted}</div>
-          <div className={styles.statLabel}>Tasks completed</div>
+          <div className={styles.statLabel}>{tr('dashboard.completed')}</div>
         </div>
         <div className={styles.statCard} style={{ '--stat-accent': 'var(--priority-high)' }}>
           <div className={`${styles.statValue} ${data.overdueCount > 0 ? styles.statValueWarn : ''}`}>
             {data.overdueCount}
           </div>
-          <div className={styles.statLabel}>Overdue</div>
+          <div className={styles.statLabel}>{tr('home.statOverdue')}</div>
         </div>
         <div className={styles.statCard} style={{ '--stat-accent': 'var(--color-text-muted)' }}>
           <div className={styles.statValue}>{pct(data.totalCompleted, data.totalCreated)}%</div>
-          <div className={styles.statLabel}>Completion rate</div>
+          <div className={styles.statLabel}>{tr('dashboard.completionRate')}</div>
         </div>
       </div>
 
       <div className={styles.chartGrid}>
         <div className={styles.chartCard}>
-          <p className={styles.chartTitle}>By status</p>
+          <p className={styles.chartTitle}>{tr('dashboard.byStatus')}</p>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={statusData}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
@@ -166,10 +166,10 @@ function PeriodSection({ title, subtitle, data }) {
         </div>
 
         <div className={styles.chartCard}>
-          <p className={styles.chartTitle}>By priority</p>
+          <p className={styles.chartTitle}>{tr('dashboard.byPriority')}</p>
           <ResponsiveContainer width="100%" height={200}>
             <PieChart>
-              <Pie data={priorityData} dataKey="count" nameKey="priority" innerRadius={42} outerRadius={68} paddingAngle={3}>
+              <Pie data={priorityData} dataKey="count" nameKey="name" innerRadius={42} outerRadius={68} paddingAngle={3}>
                 {priorityData.map((entry) => (
                   <Cell key={entry.priority} fill={PRIORITY_COLORS[entry.priority]} />
                 ))}
@@ -183,9 +183,9 @@ function PeriodSection({ title, subtitle, data }) {
 
       <div className={styles.rundownGrid}>
         <div className={styles.chartCard}>
-          <p className={styles.chartTitle}>By project</p>
+          <p className={styles.chartTitle}>{tr('dashboard.byProject')}</p>
           {data.byProject.length === 0 ? (
-            <p className={styles.emptyText}>No tasks in this period.</p>
+            <p className={styles.emptyText}>{tr('dashboard.noTasksPeriod')}</p>
           ) : (
             <div className={styles.rundownList}>
               {data.byProject.map((p) => (
@@ -204,7 +204,7 @@ function PeriodSection({ title, subtitle, data }) {
                     />
                   </div>
                   <span className={styles.rundownCount}>
-                    {p.completed}/{p.total} done
+                    {tr('home.doneOf', { done: p.completed, total: p.total })}
                   </span>
                 </div>
               ))}
@@ -213,9 +213,9 @@ function PeriodSection({ title, subtitle, data }) {
         </div>
 
         <div className={styles.chartCard}>
-          <p className={styles.chartTitle}>By team member</p>
+          <p className={styles.chartTitle}>{tr('dashboard.byMember')}</p>
           {data.byAssignee.length === 0 ? (
-            <p className={styles.emptyText}>No assigned tasks in this period.</p>
+            <p className={styles.emptyText}>{tr('dashboard.noAssignedPeriod')}</p>
           ) : (
             <div className={styles.rundownList}>
               {data.byAssignee.map((a) => (
@@ -230,8 +230,8 @@ function PeriodSection({ title, subtitle, data }) {
                     />
                   </div>
                   <span className={styles.rundownCount}>
-                    {a.total} task{a.total === 1 ? '' : 's'}
-                    {a.overdue > 0 && <span className={styles.rundownOverdue}> · {a.overdue} overdue</span>}
+                    {tr('board.taskCount', { count: a.total })}
+                    {a.overdue > 0 && <span className={styles.rundownOverdue}> · {tr('board.overdueCount', { n: a.overdue })}</span>}
                   </span>
                 </div>
               ))}
@@ -257,7 +257,7 @@ function SingleProjectDashboard({ projectId }) {
     dashboardApi
       .getSummary(projectId)
       .then(setSummary)
-      .catch(() => setError('Could not load dashboard data.'));
+      .catch(() => setError(tr('dashboard.loadFail')));
     projectsApi.getActivity(projectId).then(setActivity).catch(() => {});
   }, [projectId]);
 
@@ -265,15 +265,15 @@ function SingleProjectDashboard({ projectId }) {
     return <p style={{ color: 'var(--priority-high)' }}>{error}</p>;
   }
   if (!summary) {
-    return <p className={styles.subLine}>Loading…</p>;
+    return <p className={styles.subLine}>{tr('common.loading')}</p>;
   }
 
   const statusData = Object.entries(summary.byStatus).map(([status, count]) => ({
     status,
-    label: STATUS_LABELS[status],
+    label: tr(`status.${status}`),
     count,
   }));
-  const priorityData = Object.entries(summary.byPriority).map(([priority, count]) => ({ priority, count }));
+  const priorityData = Object.entries(summary.byPriority).map(([priority, count]) => ({ priority, name: tr(`priority.${priority}`), count }));
   const assigneeData = summary.byAssignee.map((a) => ({ name: a.name.split(' ')[0], count: a.count }));
 
   return (
@@ -281,27 +281,27 @@ function SingleProjectDashboard({ projectId }) {
       <div className={styles.statCards}>
         <div className={styles.statCard} style={{ '--stat-accent': 'var(--color-text-muted)' }}>
           <div className={styles.statValue}>{summary.totalTasks}</div>
-          <div className={styles.statLabel}>Total tasks</div>
+          <div className={styles.statLabel}>{tr('dashboard.totalTasks')}</div>
         </div>
         <div className={styles.statCard} style={{ '--stat-accent': 'var(--status-done)' }}>
           <div className={styles.statValue}>{summary.byStatus.done}</div>
-          <div className={styles.statLabel}>Completed</div>
+          <div className={styles.statLabel}>{tr('dashboard.completedShort')}</div>
         </div>
         <div className={styles.statCard} style={{ '--stat-accent': 'var(--status-in-progress)' }}>
           <div className={styles.statValue}>{summary.byStatus.in_progress}</div>
-          <div className={styles.statLabel}>In progress</div>
+          <div className={styles.statLabel}>{tr('status.in_progress')}</div>
         </div>
         <div className={styles.statCard} style={{ '--stat-accent': 'var(--priority-high)' }}>
           <div className={`${styles.statValue} ${summary.overdueCount > 0 ? styles.statValueWarn : ''}`}>
             {summary.overdueCount}
           </div>
-          <div className={styles.statLabel}>Overdue</div>
+          <div className={styles.statLabel}>{tr('home.statOverdue')}</div>
         </div>
       </div>
 
       <div className={styles.chartGrid}>
         <div className={styles.chartCard}>
-          <p className={styles.chartTitle}>Tasks by status</p>
+          <p className={styles.chartTitle}>{tr('dashboard.tasksByStatus')}</p>
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={statusData}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
@@ -318,10 +318,10 @@ function SingleProjectDashboard({ projectId }) {
         </div>
 
         <div className={styles.chartCard}>
-          <p className={styles.chartTitle}>Tasks by priority</p>
+          <p className={styles.chartTitle}>{tr('dashboard.tasksByPriority')}</p>
           <ResponsiveContainer width="100%" height={240}>
             <PieChart>
-              <Pie data={priorityData} dataKey="count" nameKey="priority" innerRadius={50} outerRadius={80} paddingAngle={3}>
+              <Pie data={priorityData} dataKey="count" nameKey="name" innerRadius={50} outerRadius={80} paddingAngle={3}>
                 {priorityData.map((entry) => (
                   <Cell key={entry.priority} fill={PRIORITY_COLORS[entry.priority]} />
                 ))}
@@ -333,7 +333,7 @@ function SingleProjectDashboard({ projectId }) {
         </div>
 
         <div className={`${styles.chartCard} ${styles.fullWidth}`}>
-          <p className={styles.chartTitle}>Open tasks per team member</p>
+          <p className={styles.chartTitle}>{tr('dashboard.openPerMember')}</p>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={assigneeData} layout="vertical" margin={{ left: 20 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" horizontal={false} />
@@ -347,9 +347,9 @@ function SingleProjectDashboard({ projectId }) {
       </div>
 
       <div className={styles.chartCard} style={{ marginTop: 20 }}>
-        <p className={styles.chartTitle}>Recent activity</p>
+        <p className={styles.chartTitle}>{tr('dashboard.recentActivity')}</p>
         {activity.length === 0 ? (
-          <p className={styles.emptyText}>Nothing yet.</p>
+          <p className={styles.emptyText}>{tr('dashboard.nothingYet')}</p>
         ) : (
           <div>
             {activity.map((a, i) => (
@@ -359,7 +359,7 @@ function SingleProjectDashboard({ projectId }) {
                     className={styles.activityDot}
                     style={{ background: a.type === 'task_created' ? 'var(--status-done)' : 'var(--status-review)' }}
                   />
-                  <strong>{a.actor_name}</strong> {a.type === 'task_created' ? 'created' : 'commented on'}{' '}
+                  <strong>{a.actor_name}</strong> {a.type === 'task_created' ? tr('dashboard.created_') : tr('dashboard.commentedOn')}{' '}
                   <span style={{ color: 'var(--color-accent)' }}>{a.task_title}</span>
                 </span>
                 <span className={styles.activityTime}>{timeAgo(a.at)}</span>
@@ -399,8 +399,8 @@ export default function DashboardPage() {
 
   const rangeInvalid = !range.from || !range.to || range.from > range.to;
   const activePreset = RANGE_PRESETS.find((p) => {
-    const [f, t] = p.range();
-    return f === range.from && t === range.to;
+    const [f, to] = p.range();
+    return f === range.from && to === range.to;
   });
 
   useEffect(() => {
@@ -412,7 +412,7 @@ export default function DashboardPage() {
       .getOverview(range.from, range.to)
       .then((data) => !cancelled && setOverview(data))
       .catch((err) =>
-        !cancelled && setOverviewError(err.response?.data?.message || 'Could not load the consolidated report.')
+        !cancelled && setOverviewError(err.response?.data?.message || tr('dashboard.overviewFail'))
       );
     return () => {
       cancelled = true;
@@ -422,15 +422,15 @@ export default function DashboardPage() {
   if (projects.length === 0) {
     return (
       <div className={styles.dashScreen}>
-        <h1>Dashboard</h1>
-        <p className={styles.subLine}>No projects yet.</p>
+        <h1>{tr('nav.dashboard')}</h1>
+        <p className={styles.subLine}>{tr('calendar.noProjects')}</p>
       </div>
     );
   }
 
   const headerTitle = showingAllProjects
-    ? 'All Projects'
-    : projects.find((p) => p.id === projectFilter)?.name || 'Dashboard';
+    ? tr('calendar.allProjectsTitle')
+    : projects.find((p) => p.id === projectFilter)?.name || tr('nav.dashboard');
 
   return (
     <div className={styles.dashScreen}>
@@ -439,14 +439,14 @@ export default function DashboardPage() {
           <h1>{headerTitle}</h1>
           <p className={styles.subLine}>
             {showingAllProjects
-              ? 'A consolidated snapshot across every project for the dates you choose.'
-              : 'A snapshot of where this project stands right now.'}
+              ? tr('dashboard.subAll')
+              : tr('dashboard.subOne')}
           </p>
         </div>
         <label className={styles.rangeLabel}>
-          Showing
+          {tr('calendar.showing')}
           <select value={projectFilter} onChange={(e) => handleProjectFilterChange(e.target.value)}>
-            <option value={ALL_PROJECTS}>All projects</option>
+            <option value={ALL_PROJECTS}>{tr('calendar.allProjects')}</option>
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
@@ -469,13 +469,13 @@ export default function DashboardPage() {
                   updateRange({ from, to });
                 }}
               >
-                {p.label}
+                {tr(p.labelKey)}
               </button>
             ))}
           </div>
           <div className={styles.rangeInputs}>
             <label className={styles.rangeLabel}>
-              From
+              {tr('calendar.from')}
               <input
                 type="date"
                 value={range.from}
@@ -484,7 +484,7 @@ export default function DashboardPage() {
               />
             </label>
             <label className={styles.rangeLabel}>
-              To
+              {tr('calendar.to')}
               <input
                 type="date"
                 value={range.to}
@@ -498,35 +498,35 @@ export default function DashboardPage() {
 
       {showingAllProjects ? (
         rangeInvalid ? (
-          <p className={styles.subLine}>Pick a start and end date (the end can't be before the start).</p>
+          <p className={styles.subLine}>{tr('dashboard.pickRange')}</p>
         ) : overviewError ? (
           <p style={{ color: 'var(--priority-high)' }}>{overviewError}</p>
         ) : !overview ? (
-          <p className={styles.subLine}>Loading…</p>
+          <p className={styles.subLine}>{tr('common.loading')}</p>
         ) : (
           <>
             <div className={styles.statCards}>
               <div className={styles.statCard} style={{ '--stat-accent': 'var(--color-text-muted)' }}>
                 <div className={styles.statValue}>{overview.totals.projects}</div>
-                <div className={styles.statLabel}>Projects</div>
+                <div className={styles.statLabel}>{tr('home.projects')}</div>
               </div>
               <div className={styles.statCard} style={{ '--stat-accent': 'var(--color-accent)' }}>
                 <div className={styles.statValue}>{overview.totals.tasks}</div>
-                <div className={styles.statLabel}>Total tasks (all time)</div>
+                <div className={styles.statLabel}>{tr('dashboard.totalAll')}</div>
               </div>
               <div className={styles.statCard} style={{ '--stat-accent': 'var(--status-done)' }}>
                 <div className={styles.statValue}>{overview.totals.completed}</div>
-                <div className={styles.statLabel}>Completed (all time)</div>
+                <div className={styles.statLabel}>{tr('dashboard.completedAll')}</div>
               </div>
               <div className={styles.statCard} style={{ '--stat-accent': 'var(--priority-high)' }}>
                 <div className={`${styles.statValue} ${overview.totals.overdue > 0 ? styles.statValueWarn : ''}`}>
                   {overview.totals.overdue}
                 </div>
-                <div className={styles.statLabel}>Overdue right now</div>
+                <div className={styles.statLabel}>{tr('dashboard.overdueNow')}</div>
               </div>
             </div>
 
-            <PeriodSection title="Selected period" subtitle={overview.period.label} data={overview.period} />
+            <PeriodSection title={tr('dashboard.selectedPeriod')} subtitle={formatRangeLabel(range.from, range.to)} data={overview.period} />
           </>
         )
       ) : (

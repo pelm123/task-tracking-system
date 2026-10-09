@@ -36,9 +36,11 @@ function startOfDay(date) {
 
 function greeting(now) {
   const h = now.getHours();
+  if (h < 5) return t('home.night');
   if (h < 12) return t('home.morning');
   if (h < 18) return t('home.afternoon');
-  return t('home.evening');
+  if (h < 21) return t('home.evening');
+  return t('home.night');
 }
 
 // One task line — used in the "My tasks" tabs and the approvals list.
@@ -339,18 +341,18 @@ export default function HomePage() {
             <section className={`${styles.card} ${styles.approvalCard}`}>
               <p className={styles.cardTitle}>{t('home.awaiting', { count: data.awaitingApproval.length })}</p>
               <div className={styles.taskList}>
-                {data.awaitingApproval.map((t) => (
+                {data.awaitingApproval.map((item) => (
                   <TaskRow
-                    key={t.id}
-                    task={t}
+                    key={item.id}
+                    task={item}
                     now={now}
                     onOpen={setSelectedTask}
                     actions={
                       <span className={styles.approvalBtns}>
-                        <button className={styles.approveBtn} onClick={() => handleApprove(t.id)}>
+                        <button className={styles.approveBtn} onClick={() => handleApprove(item.id)}>
                           {t('home.approve')}
                         </button>
-                        <button className={styles.denyBtn} onClick={() => handleDeny(t.id)}>
+                        <button className={styles.denyBtn} onClick={() => handleDeny(item.id)}>
                           {t('home.deny')}
                         </button>
                       </span>
