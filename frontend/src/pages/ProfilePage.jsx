@@ -2,19 +2,10 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import * as authApi from '../api/auth';
 import * as lineApi from '../api/line';
+import { t } from '../i18n';
 import styles from './profile.module.css';
 
-const ROLE_LABELS = { admin: 'Admin', pm: 'Project manager', member: 'Team member' };
-
-const NOTIFICATION_TYPE_LABELS = [
-  { key: 'assigned', label: "You're assigned to a task" },
-  { key: 'status_change', label: "A task you're on changes status" },
-  { key: 'comment', label: 'Someone comments on your task' },
-  { key: 'due_soon', label: 'A task is due soon (your reminder setting)' },
-  { key: 'overdue', label: 'A task goes overdue' },
-  { key: 'approved', label: 'Your task is approved' },
-  { key: 'approval_denied', label: 'Your task is sent back for changes' },
-];
+const NOTIFICATION_TYPE_KEYS = ['assigned', 'status_change', 'comment', 'due_soon', 'overdue', 'approved', 'approval_denied'];
 
 export default function ProfilePage() {
   const { user, updateUser } = useAuth();
@@ -59,7 +50,7 @@ export default function ProfilePage() {
       await lineApi.updateNotificationPreferences({ [key]: next[key] });
     } catch (err) {
       setLinePrefs(linePrefs); // revert
-      setPrefError('Could not save that setting.');
+      setPrefError(t('profile.prefFail'));
     }
   }
 
@@ -71,9 +62,9 @@ export default function ProfilePage() {
     try {
       const updated = await authApi.updateProfile(name);
       updateUser({ name: updated.name });
-      setNameMsg('Saved.');
+      setNameMsg(t('profile.saved'));
     } catch (err) {
-      setNameError(err.response?.data?.message || 'Could not update name.');
+      setNameError(err.response?.data?.message || t('profile.nameFail'));
     } finally {
       setNameSaving(false);
     }
@@ -86,18 +77,18 @@ export default function ProfilePage() {
     setPwSaving(true);
     try {
       await authApi.changePassword(currentPassword, newPassword);
-      setPwMsg('Password updated.');
+      setPwMsg(t('profile.pwUpdated'));
       setCurrentPassword('');
       setNewPassword('');
     } catch (err) {
-      setPwError(err.response?.data?.message || 'Could not change password.');
+      setPwError(err.response?.data?.message || t('profile.pwFail'));
     } finally {
       setPwSaving(false);
     }
   }
 
   async function handleUnlinkLine() {
-    if (!window.confirm('Unlink your LINE account? You will stop getting LINE notifications.')) return;
+    if (!window.confirm(t('profile.unlinkConfirm'))) return;
     await lineApi.unlinkLine();
     const fresh = await lineApi.getLinkCode();
     setLineStatus(fresh);
@@ -111,31 +102,31 @@ export default function ProfilePage() {
           <div>
             <h1 className={styles.identityName}>{user?.name}</h1>
             <p className={styles.identityMeta}>
-              {user?.email} · {ROLE_LABELS[user?.role] || user?.role}
+              {user?.email} · {t(`profile.role_${user?.role}`)}
             </p>
           </div>
         </div>
 
         <div className={styles.section}>
-          <h2 className={styles.sectionTitle}>Name</h2>
+          <h2 className={styles.sectionTitle}>{t('auth.name')}</h2>
           <form onSubmit={handleNameSubmit}>
             <div className={styles.field}>
-              <label htmlFor="profileName">Display name</label>
+              <label htmlFor="profileName">{t('profile.displayName')}</label>
               <input id="profileName" value={name} onChange={(e) => setName(e.target.value)} />
             </div>
             {nameError && <p className={styles.errorText}>{nameError}</p>}
             {nameMsg && <p className={styles.successText}>{nameMsg}</p>}
             <button type="submit" className="btn btn-primary" disabled={nameSaving}>
-              {nameSaving ? 'Saving…' : 'Save name'}
+              {nameSaving ? t('modal.saving') : t('profile.saveName')}
             </button>
           </form>
         </div>
 
         <div className={styles.section}>
-          <h2 className={styles.sectionTitle}>Password</h2>
+          <h2 className={styles.sectionTitle}>{t('auth.password')}</h2>
           <form onSubmit={handlePasswordSubmit}>
             <div className={styles.field}>
-              <label htmlFor="currentPw">Current password</label>
+              <label htmlFor="currentPw">{t('profile.currentPw')}</label>
               <input
                 id="currentPw"
                 type="password"
@@ -144,7 +135,7 @@ export default function ProfilePage() {
               />
             </div>
             <div className={styles.field}>
-              <label htmlFor="newPw">New password</label>
+              <label htmlFor="newPw">{t('profile.newPw')}</label>
               <input
                 id="newPw"
                 type="password"
@@ -156,53 +147,47 @@ export default function ProfilePage() {
             {pwError && <p className={styles.errorText}>{pwError}</p>}
             {pwMsg && <p className={styles.successText}>{pwMsg}</p>}
             <button type="submit" className="btn btn-primary" disabled={pwSaving}>
-              {pwSaving ? 'Updating…' : 'Update password'}
+              {pwSaving ? t('profile.updating') : t('profile.updatePw')}
             </button>
           </form>
         </div>
 
         <div className={styles.section}>
-          <h2 className={styles.sectionTitle}>LINE notifications</h2>
+          <h2 className={styles.sectionTitle}>{t('profile.lineTitle')}</h2>
           {lineLoading ? (
-            <p className={styles.lineHint}>Loading…</p>
+            <p className={styles.lineHint}>{t('common.loading')}</p>
           ) : lineStatus?.linked ? (
             <div>
-              <p className={styles.lineLinked}>✓ Your LINE account is linked.</p>
+              <p className={styles.lineLinked}>{t('profile.lineLinked')}</p>
 
-              <p className={styles.lineHint}>Choose which of these send you a LINE message:</p>
+              <p className={styles.lineHint}>{t('profile.linePrefsIntro')}</p>
               {linePrefs ? (
                 <div className={styles.prefList}>
-                  {NOTIFICATION_TYPE_LABELS.map(({ key, label }) => (
+                  {NOTIFICATION_TYPE_KEYS.map((key) => (
                     <label key={key} className={styles.prefRow}>
                       <input
                         type="checkbox"
                         checked={linePrefs[key] !== false}
                         onChange={() => handleTogglePref(key)}
                       />
-                      {label}
+                      {t(`profile.pref_${key}`)}
                     </label>
                   ))}
                 </div>
               ) : (
-                <p className={styles.lineHint}>Loading preferences…</p>
+                <p className={styles.lineHint}>{t('profile.loadingPrefs')}</p>
               )}
               {prefError && <p className={styles.errorText}>{prefError}</p>}
 
               <button className="btn btn-danger" onClick={handleUnlinkLine}>
-                Unlink LINE
+                {t('profile.unlink')}
               </button>
             </div>
           ) : (
             <div>
-              <p className={styles.lineHint}>
-                Add our LINE Official Account as a friend, then send this code as a message to link your
-                account:
-              </p>
+              <p className={styles.lineHint}>{t('profile.lineAddFriend')}</p>
               <div className={styles.linkCode}>{lineStatus?.code}</div>
-              <p className={styles.lineNote}>
-                Once linked, you'll get LINE messages when you're assigned a task, a task's status
-                changes, someone comments, or a due date is approaching.
-              </p>
+              <p className={styles.lineNote}>{t('profile.lineNote')}</p>
             </div>
           )}
         </div>
