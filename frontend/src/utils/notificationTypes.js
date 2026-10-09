@@ -1,3 +1,5 @@
+import { t } from '../i18n';
+
 // One color + short label per notification type, shared by the bell dropdown
 // and the Home page's "Recent updates" so a type looks the same everywhere.
 // Colors reuse the app's design tokens where one fits; "sent back" has no
@@ -15,6 +17,8 @@ export const NOTIFICATION_TYPES = {
 
 const FALLBACK = { label: 'Update', color: 'var(--color-text-muted)' };
 
+// Label is looked up at call time so it follows the current language.
 export function notificationMeta(type) {
-  return NOTIFICATION_TYPES[type] || FALLBACK;
+  const meta = NOTIFICATION_TYPES[type] || FALLBACK;
+  return { ...meta, label: t(NOTIFICATION_TYPES[type] ? `notifTypes.${type}` : 'notifTypes.fallback') };
 }

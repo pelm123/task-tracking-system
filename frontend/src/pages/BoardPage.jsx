@@ -12,14 +12,10 @@ import ProjectSwitcher from '../components/ProjectSwitcher';
 import NewTaskModal from '../components/NewTaskModal';
 import TaskDetailModal from '../components/TaskDetailModal';
 import TaskListView from '../components/TaskListView';
+import { t } from '../i18n';
 import styles from './board.module.css';
 
-const COLUMNS = [
-  { status: 'todo', label: 'To Do' },
-  { status: 'in_progress', label: 'In Progress' },
-  { status: 'review', label: 'Review' },
-  { status: 'done', label: 'Done' },
-];
+const COLUMNS = [{ status: 'todo' }, { status: 'in_progress' }, { status: 'review' }, { status: 'done' }];
 
 // Insert-or-replace by id. The server broadcasts "task:upserted" to EVERYONE
 // in the project room — including the person who just created the task — and
@@ -72,7 +68,7 @@ export default function BoardPage() {
       const data = await tasksApi.listTasks({ project_id: currentProjectId });
       setTasks(data);
     } catch (err) {
-      setError('Could not load tasks. Is the API running?');
+      setError(t('board.loadFail'));
     } finally {
       setLoading(false);
     }
@@ -124,9 +120,9 @@ export default function BoardPage() {
     // back unless the reopen actually goes through.
     if (fromStatus === 'done' && newStatus !== 'done') {
       if (!canApprove) {
-        setError('Only a PM or admin can reopen a Done task.');
+        setError(t('board.errReopenOnlyPm'));
       } else if (newStatus !== 'todo') {
-        setError('A Done task can only be reopened to To Do, with a comment explaining why.');
+        setError(t('board.errReopenToTodo'));
       } else {
         handleDeny(taskId);
       }
@@ -136,7 +132,7 @@ export default function BoardPage() {
     // Members can't drag a card straight into Done — a PM/admin has to
     // approve it from Review first (see handleApprove below).
     if (newStatus === 'done' && !canApprove) {
-      setError('Only a PM or admin can move a task to Done. Move it to Review for approval instead.');
+      setError(t('board.errDoneOnlyPm'));
       return;
     }
 
@@ -147,7 +143,7 @@ export default function BoardPage() {
       const task = tasks.find((t) => t.id === taskId);
       const isAssignee = (task?.assignees || []).some((a) => a.id === user.id);
       if (!isAssignee) {
-        setError('You can only move tasks you are assigned to.');
+        setError(t('board.errOnlyAssigned'));
         return;
       }
     }
@@ -159,7 +155,7 @@ export default function BoardPage() {
     try {
       await tasksApi.updateTaskStatus(taskId, newStatus);
     } catch (err) {
-      setError(err.response?.data?.message || 'Could not save that move — reverting.');
+      setError(err.response?.data?.message || t('board.errMoveFail'));
       loadTasks();
     }
   }
@@ -177,7 +173,7 @@ export default function BoardPage() {
       setTasks((prev) => prev.map((t) => (t.id === taskId ? updated : t)));
       setSelectedTask((prev) => (prev && prev.id === taskId ? updated : prev));
     } catch (err) {
-      setError(err.response?.data?.message || 'Could not approve that task.');
+      setError(err.response?.data?.message || t('home.approveFail'));
     }
   }
 
@@ -186,14 +182,13 @@ export default function BoardPage() {
   // saves it as a real comment and notifies the assignees.
   async function handleDeny(taskId) {
     const isReopen = tasks.find((t) => t.id === taskId)?.status === 'done';
-    const verb = isReopen ? 'reopen' : 'deny';
 
     // keep asking until the PM provides a comment or explicitly cancels (the
     // backend enforces this too, this just avoids a round-trip)
-    let reason = window.prompt(`Comment explaining why this task is being sent back to To Do (required):`, '');
+    let reason = window.prompt(t('home.promptSendBack'), '');
     if (reason === null) return; // user cancelled the prompt
     while (!reason.trim()) {
-      reason = window.prompt(`A comment is required to ${verb} a task. Please explain what needs to change:`, '');
+      reason = window.prompt(t(isReopen ? 'home.promptRequiredReopen' : 'home.promptRequiredDeny'), '');
       if (reason === null) return;
     }
     try {
@@ -201,7 +196,7 @@ export default function BoardPage() {
       setTasks((prev) => prev.map((t) => (t.id === taskId ? updated : t)));
       setSelectedTask((prev) => (prev && prev.id === taskId ? updated : prev));
     } catch (err) {
-      setError(err.response?.data?.message || `Could not ${verb} that task.`);
+      setError(err.response?.data?.message || t(isReopen ? 'home.reopenFail' : 'home.denyFail'));
     }
   }
 
@@ -280,7 +275,7 @@ export default function BoardPage() {
       setTasks((prev) => prev.map((t) => (selectedIds.includes(t.id) ? { ...t, status } : t)));
       exitSelectMode();
     } catch (err) {
-      setError('Bulk status update failed.');
+      setError(t('board.errBulkStatus'));
     }
   }
 
@@ -291,32 +286,30 @@ export default function BoardPage() {
       setTasks((prev) => prev.map((t) => byId.get(t.id) || t));
       exitSelectMode();
     } catch (err) {
-      setError('Bulk assign failed.');
+      setError(t('board.errBulkAssign'));
     }
   }
 
   async function handleBulkDelete() {
-    if (!window.confirm(`Delete ${selectedIds.length} task(s)? This cannot be undone.`)) return;
+    if (!window.confirm(t('board.bulkDeleteConfirm', { count: selectedIds.length }))) return;
     try {
       await tasksApi.bulkDelete(selectedIds);
       setTasks((prev) => prev.filter((t) => !selectedIds.includes(t.id)));
       exitSelectMode();
     } catch (err) {
-      setError(err.response?.data?.message || 'Bulk delete failed.');
+      setError(err.response?.data?.message || t('board.errBulkDelete'));
     }
   }
 
   if (loading) {
-    return <div className={styles.boardScreen}>Loading board…</div>;
+    return <div className={styles.boardScreen}>{t('board.loading')}</div>;
   }
 
   if (!currentProjectId) {
     return (
       <div className={styles.boardScreen}>
-        <h1>Board</h1>
-        <p className={styles.subLine}>
-          No project yet. Ask an Admin/PM to create one from the Home page.
-        </p>
+        <h1>{t('nav.board')}</h1>
+        <p className={styles.subLine}>{t('board.noProject')}</p>
       </div>
     );
   }
@@ -327,18 +320,20 @@ export default function BoardPage() {
         <div className={styles.titleBlock}>
           <h1 className={styles.title}>
             <span className={styles.titleDot} style={{ background: colorForProject(currentProjectId) }} />
-            {currentProject?.name || 'Board'}
+            {currentProject?.name || t('nav.board')}
           </h1>
           <p className={styles.subLine}>
-            {tasks.length} task{tasks.length === 1 ? '' : 's'}
+            {t('board.taskCount', { count: tasks.length })}
             {' · '}
-            {tasks.filter((t) => t.status === 'done').length} done
-            {projectOverdue > 0 && <span className={styles.subOverdue}> · {projectOverdue} overdue</span>}
+            {t('board.doneCount', { n: tasks.filter((x) => x.status === 'done').length })}
+            {projectOverdue > 0 && (
+              <span className={styles.subOverdue}> · {t('board.overdueCount', { n: projectOverdue })}</span>
+            )}
           </p>
         </div>
         <button className={styles.newTaskBtn} onClick={() => setShowNewTaskModal(true)}>
           <span className={styles.newTaskPlus} aria-hidden="true">+</span>
-          New task
+          {t('board.newTask')}
         </button>
       </div>
 
@@ -348,13 +343,13 @@ export default function BoardPage() {
         <div className={styles.filterBar}>
           <ProjectSwitcher canManageProjects={canApprove} />
           <input
-            placeholder="Search tasks…"
+            placeholder={t('board.searchPlaceholder')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className={styles.searchInput}
           />
           <select value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)}>
-            <option value="">All assignees</option>
+            <option value="">{t('board.allAssignees')}</option>
             {users.map((u) => (
               <option key={u.id} value={u.id}>
                 {u.name}
@@ -362,17 +357,17 @@ export default function BoardPage() {
             ))}
           </select>
           <select value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)}>
-            <option value="">All priorities</option>
-            <option value="low">Low</option>
-            <option value="medium">Medium</option>
-            <option value="high">High</option>
+            <option value="">{t('board.allPriorities')}</option>
+            <option value="low">{t('priority.low')}</option>
+            <option value="medium">{t('priority.medium')}</option>
+            <option value="high">{t('priority.high')}</option>
           </select>
           <button
             className={`btn ${overdueFirst ? 'btn-active' : 'btn-secondary'}`}
             onClick={toggleOverdueFirst}
-            title="Show overdue tasks at the top of each column"
+            title={t('board.overdueFirstHint')}
           >
-            ⚠ Overdue first{overdueTotal > 0 ? ` (${overdueTotal})` : ''}
+            ⚠ {t('board.overdueFirst')}{overdueTotal > 0 ? ` (${overdueTotal})` : ''}
           </button>
           {(searchQuery || filterAssignee || filterPriority) && (
             <button
@@ -383,7 +378,7 @@ export default function BoardPage() {
                 setFilterPriority('');
               }}
             >
-              Clear filters
+              {t('board.clearFilters')}
             </button>
           )}
         </div>
@@ -392,18 +387,18 @@ export default function BoardPage() {
           <button
             className={`btn ${selectMode ? 'btn-active' : 'btn-secondary'}`}
             onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
-            title="Select several cards to move, assign or delete them together"
+            title={t('board.selectHint')}
           >
-            {selectMode ? 'Cancel select' : 'Select'}
+            {selectMode ? t('board.cancelSelect') : t('board.select')}
           </button>
-          <div className={styles.segmented} role="tablist" aria-label="View">
+          <div className={styles.segmented} role="tablist" aria-label={t('board.view')}>
             <button
               role="tab"
               aria-selected={view === 'board'}
               className={`${styles.segBtn} ${view === 'board' ? styles.segBtnActive : ''}`}
               onClick={() => setView('board')}
             >
-              Board
+              {t('nav.board')}
             </button>
             <button
               role="tab"
@@ -411,7 +406,7 @@ export default function BoardPage() {
               className={`${styles.segBtn} ${view === 'list' ? styles.segBtnActive : ''}`}
               onClick={() => setView('list')}
             >
-              List
+              {t('board.list')}
             </button>
           </div>
         </div>
@@ -431,24 +426,24 @@ export default function BoardPage() {
             flexWrap: 'wrap',
           }}
         >
-          <span style={{ fontSize: 13, fontWeight: 600 }}>{selectedIds.length} selected</span>
+          <span style={{ fontSize: 13, fontWeight: 600 }}>{t('board.selected', { n: selectedIds.length })}</span>
           <select onChange={(e) => e.target.value && handleBulkStatus(e.target.value)} defaultValue="">
             <option value="" disabled>
-              Move to…
+              {t('board.moveTo')}
             </option>
-            <option value="todo">{canApprove ? 'To Do' : 'Back to To Do'}</option>
-            <option value="in_progress">{canApprove ? 'In Progress' : 'Accept (In Progress)'}</option>
-            <option value="review">{canApprove ? 'Review' : 'Submit for review'}</option>
-            {canApprove && <option value="done">Done</option>}
+            <option value="todo">{canApprove ? t('status.todo') : t('board.backToTodo')}</option>
+            <option value="in_progress">{canApprove ? t('status.in_progress') : t('board.acceptOpt')}</option>
+            <option value="review">{canApprove ? t('status.review') : t('board.submitOpt')}</option>
+            {canApprove && <option value="done">{t('status.done')}</option>}
           </select>
           <select
             onChange={(e) => handleBulkAssign(e.target.value === '__clear__' ? null : e.target.value)}
             defaultValue=""
           >
             <option value="" disabled>
-              Add assignee…
+              {t('board.addAssignee')}
             </option>
-            {canApprove && <option value="__clear__">Clear all assignees</option>}
+            {canApprove && <option value="__clear__">{t('board.clearAssignees')}</option>}
             {/* members can only bring in fellow members, and can't clear assignees */}
             {users
               .filter((u) => canApprove || u.role === 'member')
@@ -459,7 +454,7 @@ export default function BoardPage() {
               ))}
           </select>
           <button className="btn btn-danger" onClick={handleBulkDelete}>
-            Delete selected
+            {t('board.deleteSelected')}
           </button>
         </div>
       )}
@@ -486,7 +481,7 @@ export default function BoardPage() {
               <KanbanColumn
                 key={col.status}
                 status={col.status}
-                label={col.label}
+                label={t(`status.${col.status}`)}
                 tasks={sortedTasks.filter((t) => t.status === col.status)}
                 onTaskClick={setSelectedTask}
                 selectMode={selectMode}

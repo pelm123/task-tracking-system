@@ -3,11 +3,29 @@ import { Link } from 'react-router-dom';
 import { useProject } from '../context/ProjectContext';
 import styles from './projectSwitcher.module.css';
 import { colorForProject } from '../utils/projectColor';
+import { t } from '../i18n';
 
 const SEARCH_THRESHOLD = 6;
 
-export default function ProjectSwitcher({ canManageProjects }) {
-  const { projects, currentProjectId, currentProject, selectProject } = useProject();
+// Two modes:
+//  - default (Board): picks the app-wide current project.
+//  - controlled (Calendar): pass `value` / `onChange` and `allOption` to add an
+//    "All projects" entry — the same dropdown, just driven by the page.
+export default function ProjectSwitcher({
+  canManageProjects,
+  value,
+  onChange,
+  allOption,
+  alignRight = false,
+}) {
+  const { projects, currentProjectId: ctxProjectId, currentProject: ctxProject, selectProject } = useProject();
+  const controlled = typeof onChange === 'function';
+  const currentProjectId = controlled ? value : ctxProjectId;
+  const showingAll = controlled && allOption && value === allOption.value;
+  const currentProject = controlled
+    ? projects.find((p) => p.id === value) || null
+    : ctxProject;
+  const totalTasks = projects.reduce((sum, p) => sum + (Number(p.task_count) || 0), 0);
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const wrapRef = useRef(null);
@@ -33,7 +51,8 @@ export default function ProjectSwitcher({ canManageProjects }) {
   }, [projects, search]);
 
   function handleSelect(id) {
-    selectProject(id);
+    if (controlled) onChange(id);
+    else selectProject(id);
     setOpen(false);
   }
 
@@ -45,25 +64,31 @@ export default function ProjectSwitcher({ canManageProjects }) {
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
       >
-        {currentProject ? (
+        {showingAll ? (
+          <>
+            <span className={styles.allDot} aria-hidden="true" />
+            <span className={styles.triggerName}>{allOption.label}</span>
+            <span className={styles.countBadge}>{totalTasks}</span>
+          </>
+        ) : currentProject ? (
           <>
             <span className={styles.dot} style={{ background: colorForProject(currentProject.id) }} />
             <span className={styles.triggerName}>{currentProject.name}</span>
             <span className={styles.countBadge}>{currentProject.task_count}</span>
           </>
         ) : (
-          <span className={styles.triggerName}>No projects yet</span>
+          <span className={styles.triggerName}>{t('switcher.none')}</span>
         )}
         <span className={styles.chevron}>{open ? '▴' : '▾'}</span>
       </button>
 
       {open && (
-        <div className={styles.panel}>
+        <div className={`${styles.panel} ${alignRight ? styles.panelRight : ''}`}>
           {projects.length > SEARCH_THRESHOLD && (
             <div className={styles.searchWrap}>
               <input
                 className={styles.searchInput}
-                placeholder="Search projects…"
+                placeholder={t('switcher.search')}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 autoFocus
@@ -72,7 +97,17 @@ export default function ProjectSwitcher({ canManageProjects }) {
           )}
 
           <div className={styles.list}>
-            {filtered.length === 0 && <p className={styles.emptyText}>No matching projects</p>}
+            {allOption && !search.trim() && (
+              <div
+                className={`${styles.row} ${showingAll ? styles.rowActive : ''}`}
+                onClick={() => handleSelect(allOption.value)}
+              >
+                <span className={styles.allDot} aria-hidden="true" />
+                <span className={styles.rowName}>{allOption.label}</span>
+                <span className={styles.countBadge}>{totalTasks}</span>
+              </div>
+            )}
+            {filtered.length === 0 && <p className={styles.emptyText}>{t('switcher.noMatch')}</p>}
             {filtered.map((p) => (
               <div
                 key={p.id}
@@ -95,7 +130,7 @@ export default function ProjectSwitcher({ canManageProjects }) {
               style={{ textDecoration: 'none', boxSizing: 'border-box' }}
               onClick={() => setOpen(false)}
             >
-              Manage projects on Home →
+              {t('switcher.manage')}
             </Link>
           )}
         </div>
