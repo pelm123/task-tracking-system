@@ -8,10 +8,29 @@
 
 .boardHeader {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  margin-bottom: 4px;
+  margin-bottom: 16px;
   gap: 16px;
+}
+
+.titleBlock {
+  min-width: 0;
+}
+
+.title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 24px;
+  margin: 0 0 2px;
+}
+
+.titleDot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .boardHeader h1 {
@@ -25,6 +44,68 @@
   margin: 0 0 20px;
 }
 
+.boardHeader .subLine {
+  margin: 0;
+}
+
+.subOverdue {
+  color: var(--priority-high);
+  font-weight: 600;
+}
+
+/* One toolbar row: filters on the left, view controls on the right */
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--color-border);
+  flex-wrap: wrap;
+}
+
+.searchInput {
+  min-width: 220px;
+}
+
+.viewControls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.segmented {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.segBtn {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 5px 14px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.segBtn:hover {
+  color: var(--color-text);
+}
+
+.segBtnActive {
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  box-shadow: var(--shadow-md);
+}
+
 .headerActions {
   display: flex;
   align-items: center;
@@ -34,8 +115,8 @@
 
 .filterBar {
   display: flex;
+  align-items: center;
   gap: 8px;
-  margin-bottom: 18px;
   flex-wrap: wrap;
 }
 
@@ -194,6 +275,46 @@
 .dueDate {
   font-size: 12px;
   color: var(--color-text-muted);
+}
+
+/* Overdue cards: red outline (top/right/bottom — the left edge keeps its
+   priority color) plus a faint red tint, so late work stands out in a full
+   column without reading anything. */
+.card.cardOverdue {
+  border-top-color: var(--priority-high);
+  border-right-color: var(--priority-high);
+  border-bottom-color: var(--priority-high);
+  background: rgba(201, 96, 62, 0.1);
+}
+
+.card.cardOverdue:hover {
+  border-top-color: var(--priority-high);
+  border-right-color: var(--priority-high);
+  border-bottom-color: var(--priority-high);
+}
+
+.overdueBadge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--priority-high);
+  color: #fff;
+  white-space: nowrap;
+}
+
+.columnHeaderRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.overdueCount {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--priority-high);
 }
 
 .approvalActions {

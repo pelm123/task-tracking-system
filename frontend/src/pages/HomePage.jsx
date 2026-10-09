@@ -6,6 +6,8 @@ import * as tasksApi from '../api/tasks';
 import * as usersApi from '../api/users';
 import * as notificationsApi from '../api/notifications';
 import TaskDetailModal from '../components/TaskDetailModal';
+import NewProjectModal from '../components/NewProjectModal';
+import ConfirmDialog from '../components/ConfirmDialog';
 import { getDueCountdown, isOverdue, formatOverdueShort } from '../utils/dueDate';
 import styles from './home.module.css';
 
@@ -120,7 +122,7 @@ function TaskRow({ task, now, onOpen, actions }) {
 
 export default function HomePage() {
   const { user } = useAuth();
-  const { projects, selectProject } = useProject();
+  const { projects, selectProject, createProject, deleteProject } = useProject();
   const navigate = useNavigate();
   const canApprove = user?.role === 'admin' || user?.role === 'pm';
 
@@ -131,6 +133,8 @@ export default function HomePage() {
   const [error, setError] = useState('');
   const [tab, setTab] = useState(null); // null = pick a sensible default once data is in
   const [selectedTask, setSelectedTask] = useState(null);
+  const [showNewProject, setShowNewProject] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null); // { project, total }
 
   // ticks every minute so countdowns / overdue flags stay live
   const [now, setNow] = useState(() => new Date());
@@ -278,6 +282,17 @@ export default function HomePage() {
     }
   }
 
+  async function handleCreateProject(payload) {
+    const created = await createProject(payload);
+    load(); // pick up the new project's (empty) stats
+    return created;
+  }
+
+  async function handleDeleteProject(id) {
+    await deleteProject(id);
+    load(); // drop the deleted project's tasks from every list and stat
+  }
+
   function openProject(projectId) {
     selectProject(projectId);
     navigate('/board');
@@ -413,32 +428,61 @@ export default function HomePage() {
 
         <div className={styles.sideCol}>
           <section className={styles.card}>
-            <p className={styles.cardTitle}>Projects <span className={styles.cardHint}>· color = project</span></p>
+            <div className={styles.cardHeadRow}>
+              <p className={`${styles.cardTitle} ${styles.cardTitleInline}`}>
+                Projects <span className={styles.cardHint}>· color = project</span>
+              </p>
+              {canApprove && (
+                <button type="button" className={styles.newProjectBtn} onClick={() => setShowNewProject(true)}>
+                  + New project
+                </button>
+              )}
+            </div>
             {data.projectStats.length === 0 ? (
-              <p className={styles.emptyText}>No projects yet.</p>
+              <p className={styles.emptyText}>
+                No projects yet.{canApprove ? ' Click “+ New project” to create one.' : ''}
+              </p>
             ) : (
               <div className={styles.projectList}>
                 {data.projectStats.map(({ project, total, done, overdue, mineOpen }) => {
                   const pct = total === 0 ? 0 : Math.round((done / total) * 100);
                   const color = colorForProject(project.id);
                   return (
-                    <button key={project.id} className={styles.projectItem} onClick={() => openProject(project.id)}>
-                      <div className={styles.projectTop}>
-                        <span className={styles.projectDotLg} style={{ background: color }} />
-                        <span className={styles.projectName} title={project.name}>
-                          {project.name}
-                        </span>
-                        <span className={styles.projectPct}>{pct}%</span>
-                      </div>
-                      <div className={styles.progressTrack}>
-                        <div className={styles.progressFill} style={{ width: `${pct}%`, background: color }} />
-                      </div>
-                      <p className={styles.projectMeta}>
-                        <span>{done}/{total} done</span>
-                        {mineOpen > 0 && <span>{mineOpen} assigned to you</span>}
-                        {overdue > 0 && <span className={styles.projectOverdue}>{overdue} overdue</span>}
-                      </p>
-                    </button>
+                    <div key={project.id} className={styles.projectItemWrap}>
+                      <button
+                        type="button"
+                        className={styles.projectItem}
+                        onClick={() => openProject(project.id)}
+                        title="Open this project's board"
+                      >
+                        <div className={styles.projectTop}>
+                          <span className={styles.projectDotLg} style={{ background: color }} />
+                          <span className={styles.projectName} title={project.name}>
+                            {project.name}
+                          </span>
+                          <span className={styles.projectPct}>{pct}%</span>
+                        </div>
+                        <div className={styles.progressTrack}>
+                          <div className={styles.progressFill} style={{ width: `${pct}%`, background: color }} />
+                        </div>
+                        <p className={styles.projectMeta}>
+                          <span>{done}/{total} done</span>
+                          {mineOpen > 0 && <span>{mineOpen} assigned to you</span>}
+                          {overdue > 0 && <span className={styles.projectOverdue}>{overdue} overdue</span>}
+                        </p>
+                      </button>
+                      {canApprove && (
+                        <button
+                          type="button"
+                          className={styles.projectDeleteBtn}
+                          title={`Delete "${project.name}"`}
+                          aria-label={`Delete "${project.name}"`}
+                          onClick={() => setDeleteTarget({ project, total })}
+                        >
+                          🗑
+                        </button>
+                      )}
+                    </div>
                   );
                 })}
               </div>
@@ -477,6 +521,24 @@ export default function HomePage() {
           canApprove={canApprove}
           onApprove={handleApprove}
           onDeny={handleDeny}
+        />
+      )}
+
+      {showNewProject && (
+        <NewProjectModal onClose={() => setShowNewProject(false)} onCreate={handleCreateProject} />
+      )}
+
+      {deleteTarget && (
+        <ConfirmDialog
+          title="Delete project"
+          message={`This permanently deletes "${deleteTarget.project.name}" and all ${deleteTarget.total} task${
+            deleteTarget.total === 1 ? '' : 's'
+          } in it. This cannot be undone.`}
+          confirmLabel="Delete project"
+          danger
+          requireText={deleteTarget.project.name}
+          onConfirm={() => handleDeleteProject(deleteTarget.project.id)}
+          onClose={() => setDeleteTarget(null)}
         />
       )}
     </div>
