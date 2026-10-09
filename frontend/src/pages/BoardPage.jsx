@@ -6,6 +6,7 @@ import * as tasksApi from '../api/tasks';
 import * as usersApi from '../api/users';
 import socket from '../api/socket';
 import { isOverdue } from '../utils/dueDate';
+import { colorForProject } from '../utils/projectColor';
 import KanbanColumn from '../components/KanbanColumn';
 import NewTaskModal from '../components/NewTaskModal';
 import TaskDetailModal from '../components/TaskDetailModal';
@@ -232,6 +233,7 @@ export default function BoardPage() {
     return true;
   });
 
+  const projectOverdue = tasks.filter((t) => isOverdue(t.due_date, t.status, now)).length;
   const overdueTotal = filteredTasks.filter((t) => isOverdue(t.due_date, t.status, now)).length;
 
   // Overdue first, most overdue (earliest due date) at the very top; every
@@ -305,7 +307,7 @@ export default function BoardPage() {
       <div className={styles.boardScreen}>
         <h1>Board</h1>
         <p className={styles.subLine}>
-          No project yet. Ask an Admin/PM to create one, or use "+ Project" in the top bar if you have access.
+          No project yet. Ask an Admin/PM to create one from the Home page.
         </p>
       </div>
     );
@@ -314,71 +316,95 @@ export default function BoardPage() {
   return (
     <div className={styles.boardScreen}>
       <div className={styles.boardHeader}>
-        <div>
-          <h1>{currentProject?.name || 'Board'}</h1>
-          <p className={styles.subLine}>Drag cards between columns, or click one to see details.</p>
+        <div className={styles.titleBlock}>
+          <h1 className={styles.title}>
+            <span className={styles.titleDot} style={{ background: colorForProject(currentProjectId) }} />
+            {currentProject?.name || 'Board'}
+          </h1>
+          <p className={styles.subLine}>
+            {tasks.length} task{tasks.length === 1 ? '' : 's'}
+            {' · '}
+            {tasks.filter((t) => t.status === 'done').length} done
+            {projectOverdue > 0 && <span className={styles.subOverdue}> · {projectOverdue} overdue</span>}
+          </p>
         </div>
-        <div className={styles.headerActions}>
-          <button className="btn btn-primary" onClick={() => setShowNewTaskModal(true)}>
-            + New task
-          </button>
-          <button
-            className={`btn ${selectMode ? 'btn-active' : 'btn-secondary'}`}
-            onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
-          >
-            {selectMode ? 'Cancel select' : 'Select'}
-          </button>
-          <button
-            className="btn btn-secondary"
-            onClick={() => setView((v) => (v === 'board' ? 'list' : 'board'))}
-          >
-            {view === 'board' ? 'List view' : 'Board view'}
-          </button>
-        </div>
+        <button className="btn btn-primary" onClick={() => setShowNewTaskModal(true)}>
+          + New task
+        </button>
       </div>
 
       {error && <p style={{ color: 'var(--priority-high)', marginBottom: 16 }}>{error}</p>}
 
-      <div className={styles.filterBar}>
-        <input
-          placeholder="Search tasks…"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          style={{ minWidth: 220 }}
-        />
-        <select value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)}>
-          <option value="">All assignees</option>
-          {users.map((u) => (
-            <option key={u.id} value={u.id}>
-              {u.name}
-            </option>
-          ))}
-        </select>
-        <select value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)}>
-          <option value="">All priorities</option>
-          <option value="low">Low</option>
-          <option value="medium">Medium</option>
-          <option value="high">High</option>
-        </select>
-        <button
-          className={`btn ${overdueFirst ? 'btn-active' : 'btn-secondary'}`}
-          onClick={toggleOverdueFirst}
-          title="Show overdue tasks at the top of each column"
-        >
-          ⚠ Overdue first{overdueTotal > 0 ? ` (${overdueTotal})` : ''}
-        </button>
-        {(searchQuery || filterAssignee || filterPriority) && (
+      <div className={styles.toolbar}>
+        <div className={styles.filterBar}>
+          <input
+            placeholder="Search tasks…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className={styles.searchInput}
+          />
+          <select value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)}>
+            <option value="">All assignees</option>
+            {users.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.name}
+              </option>
+            ))}
+          </select>
+          <select value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)}>
+            <option value="">All priorities</option>
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+          </select>
           <button
-            className="btn btn-ghost"
-            onClick={() => {
-              setSearchQuery('');
-              setFilterAssignee('');
-              setFilterPriority('');
-            }}
+            className={`btn ${overdueFirst ? 'btn-active' : 'btn-secondary'}`}
+            onClick={toggleOverdueFirst}
+            title="Show overdue tasks at the top of each column"
           >
-            Clear filters
+            ⚠ Overdue first{overdueTotal > 0 ? ` (${overdueTotal})` : ''}
           </button>
-        )}
+          {(searchQuery || filterAssignee || filterPriority) && (
+            <button
+              className="btn btn-ghost"
+              onClick={() => {
+                setSearchQuery('');
+                setFilterAssignee('');
+                setFilterPriority('');
+              }}
+            >
+              Clear filters
+            </button>
+          )}
+        </div>
+
+        <div className={styles.viewControls}>
+          <button
+            className={`btn ${selectMode ? 'btn-active' : 'btn-secondary'}`}
+            onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
+            title="Select several cards to move, assign or delete them together"
+          >
+            {selectMode ? 'Cancel select' : 'Select'}
+          </button>
+          <div className={styles.segmented} role="tablist" aria-label="View">
+            <button
+              role="tab"
+              aria-selected={view === 'board'}
+              className={`${styles.segBtn} ${view === 'board' ? styles.segBtnActive : ''}`}
+              onClick={() => setView('board')}
+            >
+              Board
+            </button>
+            <button
+              role="tab"
+              aria-selected={view === 'list'}
+              className={`${styles.segBtn} ${view === 'list' ? styles.segBtnActive : ''}`}
+              onClick={() => setView('list')}
+            >
+              List
+            </button>
+          </div>
+        </div>
       </div>
 
       {selectMode && selectedIds.length > 0 && (

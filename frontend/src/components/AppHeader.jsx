@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import ProjectSwitcher from './ProjectSwitcher';
 import NotificationBell from './NotificationBell';
@@ -7,6 +7,10 @@ import styles from './appHeader.module.css';
 export default function AppHeader() {
   const { user, logout } = useAuth();
   const canManageProjects = ['admin', 'pm'].includes(user?.role);
+  const { pathname } = useLocation();
+  // The project switcher only drives the Board; every other page either spans
+  // all projects or has its own filter, so it's hidden there.
+  const showProjectSwitcher = pathname.startsWith('/board');
 
   return (
     <div className={styles.header}>
@@ -15,7 +19,7 @@ export default function AppHeader() {
           Task Tracker
         </NavLink>
 
-        <ProjectSwitcher canManageProjects={canManageProjects} />
+        {showProjectSwitcher && <ProjectSwitcher canManageProjects={canManageProjects} />}
 
         <nav className={styles.nav}>
           <NavLink
