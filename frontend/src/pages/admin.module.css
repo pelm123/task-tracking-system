@@ -125,7 +125,7 @@
   text-transform: uppercase;
   padding: 2px 8px;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.05);
+  background: color-mix(in srgb, var(--color-text) 7%, transparent);
 }
 
 .actionBtn {
@@ -156,7 +156,7 @@
   padding: 2px 7px;
   border-radius: 999px;
   background: var(--priority-medium);
-  color: #1b1b1b;
+  color: var(--color-on-accent);
 }
 
 .pendingBox {

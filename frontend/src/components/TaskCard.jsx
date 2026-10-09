@@ -68,7 +68,7 @@ export default function TaskCard({
               className={styles.priorityTag}
               style={{
                 color: PRIORITY_COLORS[task.priority],
-                background: 'rgba(255,255,255,0.05)',
+                background: 'color-mix(in srgb, var(--color-text) 7%, transparent)',
               }}
             >
               {task.priority}
