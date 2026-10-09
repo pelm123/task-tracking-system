@@ -2,10 +2,12 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import ProjectSwitcher from './ProjectSwitcher';
 import NotificationBell from './NotificationBell';
+import { useTheme } from '../context/ThemeContext';
 import styles from './appHeader.module.css';
 
 export default function AppHeader() {
   const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const canManageProjects = ['admin', 'pm'].includes(user?.role);
   const { pathname } = useLocation();
   // The project switcher only drives the Board; every other page either spans
@@ -58,6 +60,16 @@ export default function AppHeader() {
       </div>
 
       <div className={styles.right}>
+        <button
+          type="button"
+          className={styles.themeBtn}
+          onClick={toggleTheme}
+          title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+        >
+          <span aria-hidden="true">{theme === 'dark' ? '☀' : '☾'}</span>
+          {theme === 'dark' ? 'Light' : 'Dark'}
+        </button>
         <NotificationBell />
         <NavLink to="/profile" className={styles.userLabel} style={{ textDecoration: 'none' }}>
           {user?.name} · {user?.role}

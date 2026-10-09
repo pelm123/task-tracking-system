@@ -129,7 +129,7 @@
 
 .btnPrimary {
   background: var(--color-accent);
-  color: #1c1f1e;
+  color: var(--color-on-accent);
   border: none;
   font-weight: 600;
   padding: 9px 16px;
@@ -324,7 +324,7 @@
   align-items: center;
   justify-content: center;
   overflow: auto;
-  background: #1c1f1e;
+  background: var(--color-bg);
   min-height: 300px;
 }
 
