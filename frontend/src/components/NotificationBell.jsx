@@ -8,6 +8,7 @@ import {
   pickMostImportantType,
 } from '../utils/notificationSound';
 import styles from './notificationBell.module.css';
+import { notificationMeta } from '../utils/notificationTypes';
 
 const POLL_INTERVAL_MS = 30000;
 
@@ -133,9 +134,13 @@ export default function NotificationBell() {
               <button
                 key={n.id}
                 className={`${styles.item} ${!n.is_read ? styles.itemUnread : ''}`}
+                style={{ '--n-color': notificationMeta(n.type).color }}
                 onClick={() => handleItemClick(n)}
               >
-                <p className={styles.itemMessage}>{n.message}</p>
+                <p className={styles.itemMessage}>
+                  <span className={styles.typeTag}>{notificationMeta(n.type).label}</span>
+                  {n.message}
+                </p>
                 <span className={styles.itemMeta}>{timeAgo(n.created_at)}</span>
               </button>
             ))

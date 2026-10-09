@@ -76,6 +76,13 @@ const G5 = 783.99;
 const A5 = 880.0;
 
 const SOUNDS = {
+  // alarm: two-tone alternating "siren" — the most urgent sound in the set
+  overdue: (c) => {
+    [0, 0.3].forEach((s) => {
+      tone(c, { freq: A5, start: s, duration: 0.14, type: 'square', volume: 0.11 });
+      tone(c, { freq: E5, start: s + 0.15, duration: 0.14, type: 'square', volume: 0.11 });
+    });
+  },
   // urgent: three quick, sharp beeps
   due_soon: (c) => {
     [0, 0.16, 0.32].forEach((s) => tone(c, { freq: A5, start: s, duration: 0.12, type: 'square', volume: 0.1 }));
@@ -113,7 +120,7 @@ const SOUNDS = {
 
 // When several notifications land in the same poll, only the most important
 // one makes a sound — a burst of five chimes at once is just noise.
-const PRIORITY = ['due_soon', 'approval_denied', 'assigned', 'approved', 'comment', 'status_change', 'task_updated'];
+const PRIORITY = ['overdue', 'due_soon', 'approval_denied', 'assigned', 'approved', 'comment', 'status_change', 'task_updated'];
 
 export function pickMostImportantType(types) {
   return PRIORITY.find((t) => types.includes(t)) || types[0];

@@ -57,6 +57,59 @@ async function checkDueSoonTasks() {
   }
 }
 
+// Tells people when a task has slipped past its due date. Runs on the same
+// every-minute tick as the due-soon reminders.
+//
+// Who hears about it: everyone assigned to the task, plus whoever created it
+// (usually the PM who is chasing it). Each person is told ONCE per due date:
+// the de-dup looks for an 'overdue' notification created after the task's
+// current due_date, so if the due date is pushed back and then missed again,
+// they're notified again — but they aren't re-notified every minute.
+//
+// Note: the first run after deploying also catches up on tasks that were
+// already overdue, so people get one notification for each of those.
+async function checkOverdueTasks() {
+  try {
+    const result = await pool.query(
+      `SELECT t.id, t.title, t.due_date, t.priority, r.user_id
+       FROM tasks t
+       JOIN LATERAL (
+         SELECT user_id FROM task_assignees WHERE task_id = t.id
+         UNION
+         SELECT t.created_by
+       ) r ON r.user_id IS NOT NULL
+       JOIN users u ON u.id = r.user_id AND u.is_approved = TRUE
+       WHERE t.status != 'done'
+         AND t.due_date IS NOT NULL
+         AND t.due_date < now()
+         AND NOT EXISTS (
+           SELECT 1 FROM notifications n
+           WHERE n.task_id = t.id
+             AND n.user_id = r.user_id
+             AND n.type = 'overdue'
+             AND n.created_at > t.due_date
+         )`
+    );
+
+    for (const task of result.rows) {
+      const priorityLabel = task.priority.charAt(0).toUpperCase() + task.priority.slice(1);
+      const message = `"${task.title}" is overdue — it was due ${formatDueDate(task.due_date)} (${priorityLabel} priority)`;
+      await pool.query(
+        `INSERT INTO notifications (user_id, task_id, type, message)
+         VALUES ($1, $2, 'overdue', $3)`,
+        [task.user_id, task.id, message]
+      );
+      notifyLineIfLinked(task.user_id, `🚨 ${message}`, 'overdue');
+    }
+
+    if (result.rows.length > 0) {
+      console.log(`[overdue-check] created ${result.rows.length} overdue notification(s)`);
+    }
+  } catch (err) {
+    console.error('[overdue-check] error:', err.message);
+  }
+}
+
 function startDueDateScheduler() {
   // Runs every minute. Reminder windows are custom per task (as short as
   // 1 hour), and people expect a reminder to show up right away once it's
@@ -65,8 +118,11 @@ function startDueDateScheduler() {
   // (filtered to tasks due within their own reminder window, with the
   // NOT EXISTS de-dup check), so running it every minute is fine at this
   // scale.
-  cron.schedule('* * * * *', checkDueSoonTasks);
+  cron.schedule('* * * * *', async () => {
+    await checkDueSoonTasks();
+    await checkOverdueTasks();
+  });
   console.log('[due-date-check] scheduler started (runs every minute)');
 }
 
-module.exports = { startDueDateScheduler, checkDueSoonTasks };
+module.exports = { startDueDateScheduler, checkDueSoonTasks, checkOverdueTasks };

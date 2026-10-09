@@ -627,3 +627,27 @@
     opacity: 0.7;
   }
 }
+
+/* Notification type color-coding (color comes from --n-color on the item) */
+.notifItem {
+  border-left: 3px solid var(--n-color, transparent);
+}
+
+.notifUnread {
+  background: color-mix(in srgb, var(--n-color, var(--color-accent)) 12%, transparent);
+  border-left-color: var(--n-color, var(--color-accent));
+}
+
+.notifTag {
+  display: inline-block;
+  margin-right: 7px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--n-color) 20%, transparent);
+  color: var(--n-color);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  vertical-align: 1px;
+}

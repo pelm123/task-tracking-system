@@ -8,6 +8,7 @@ import * as notificationsApi from '../api/notifications';
 import TaskDetailModal from '../components/TaskDetailModal';
 import NewProjectModal from '../components/NewProjectModal';
 import ConfirmDialog from '../components/ConfirmDialog';
+import { notificationMeta } from '../utils/notificationTypes';
 import { getDueCountdown, isOverdue, formatOverdueShort } from '../utils/dueDate';
 import styles from './home.module.css';
 
@@ -499,9 +500,13 @@ export default function HomePage() {
                   <button
                     key={n.id}
                     className={`${styles.notifItem} ${!n.is_read ? styles.notifUnread : ''}`}
+                    style={{ '--n-color': notificationMeta(n.type).color }}
                     onClick={() => handleNotificationClick(n)}
                   >
-                    <p className={styles.notifMessage}>{n.message}</p>
+                    <p className={styles.notifMessage}>
+                      <span className={styles.notifTag}>{notificationMeta(n.type).label}</span>
+                      {n.message}
+                    </p>
                     <span className={styles.notifTime}>{timeAgo(n.created_at)}</span>
                   </button>
                 ))}
