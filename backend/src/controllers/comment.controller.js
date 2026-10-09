@@ -1,5 +1,5 @@
 const pool = require('../config/db');
-const { notifyLineIfLinked } = require('../config/line');
+const { notifyMany } = require('../config/notify');
 
 function snippet(text, maxLen = 60) {
   const trimmed = text.trim();
@@ -10,7 +10,7 @@ function snippet(text, maxLen = 60) {
 async function listComments(req, res) {
   try {
     const result = await pool.query(
-      `SELECT c.id, c.content, c.created_at, c.user_id, u.name AS author_name
+      `SELECT c.id, c.content, c.created_at, c.updated_at, c.user_id, u.name AS author_name
        FROM comments c
        JOIN users u ON u.id = c.user_id
        WHERE c.task_id = $1
@@ -55,7 +55,7 @@ async function createComment(req, res) {
     const result = await pool.query(
       `INSERT INTO comments (task_id, user_id, content)
        VALUES ($1, $2, $3)
-       RETURNING id, content, created_at, user_id`,
+       RETURNING id, content, created_at, updated_at, user_id`,
       [req.params.taskId, req.user.id, content.trim()]
     );
 
@@ -67,16 +67,18 @@ async function createComment(req, res) {
 
     if (assigneeIds.length > 0) {
       const authorResult = await pool.query('SELECT name FROM users WHERE id = $1', [req.user.id]);
-      const authorName = authorResult.rows[0]?.name || 'Someone';
-      const message = `${authorName} commented on "${task.title}": "${snippet(content)}"`;
-      for (const assigneeId of assigneeIds) {
-        await pool.query(
-          `INSERT INTO notifications (user_id, task_id, type, message)
-           VALUES ($1, $2, 'comment', $3)`,
-          [assigneeId, task.id, message]
-        );
-        notifyLineIfLinked(assigneeId, `💬 ${message}`, 'comment');
-      }
+      const authorName = authorResult.rows[0]?.name || null;
+      await notifyMany(assigneeIds, {
+        taskId: task.id,
+        type: 'comment',
+        emoji: '💬',
+        build: (L) =>
+          L.tr('n.comment', {
+            actor: authorName || L.tr('someone'),
+            title: task.title,
+            snippet: snippet(content),
+          }),
+      });
     }
 
     res.status(201).json(result.rows[0]);
@@ -95,9 +97,9 @@ async function updateComment(req, res) {
 
   try {
     const result = await pool.query(
-      `UPDATE comments SET content = $1
+      `UPDATE comments SET content = $1, updated_at = now()
        WHERE id = $2 AND user_id = $3
-       RETURNING id, content, created_at, user_id`,
+       RETURNING id, content, created_at, updated_at, user_id`,
       [content.trim(), req.params.id, req.user.id]
     );
     if (result.rows.length === 0) {

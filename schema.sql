@@ -11,7 +11,7 @@ CREATE TYPE task_priority AS ENUM ('low', 'medium', 'high');
 -- 'task_updated' (general edits: title/description/priority/due date/
 -- reminder) is deliberately left out of line_notification_prefs below —
 -- it's in-app only and never pushed to LINE.
-CREATE TYPE notification_type AS ENUM ('due_soon', 'assigned', 'comment', 'status_change', 'approved', 'approval_denied', 'task_updated');
+CREATE TYPE notification_type AS ENUM ('due_soon', 'assigned', 'comment', 'status_change', 'approved', 'approval_denied', 'task_updated', 'overdue');
 
 -- ── Users ───────────────────────────────────────────────────
 CREATE TABLE users (
@@ -25,14 +25,19 @@ CREATE TABLE users (
     -- which notification_type values push to LINE once an account is
     -- linked; all on by default (see ProfilePage's "LINE notifications")
     line_notification_prefs JSONB NOT NULL DEFAULT
-      '{"assigned": true, "status_change": true, "comment": true, "due_soon": true, "approved": true, "approval_denied": true}'::jsonb,
+      '{"assigned": true, "status_change": true, "comment": true, "due_soon": true, "approved": true, "approval_denied": true, "overdue": true}'::jsonb,
+    -- new sign-ups are inserted as FALSE and can't log in until an admin approves
+    is_approved   BOOLEAN NOT NULL DEFAULT TRUE,
+    -- interface language; notifications and LINE messages are written in it
+    language      VARCHAR(2) NOT NULL DEFAULT 'th' CHECK (language IN ('th', 'en')),
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- ── Projects ────────────────────────────────────────────────
 CREATE TABLE projects (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name        VARCHAR(150) NOT NULL,
+    name        VARCHAR(500) NOT NULL,
+    color       VARCHAR(7),   -- '#RRGGBB', picked from the palette in config/projectColors.js
     description TEXT,
     created_by  UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -42,7 +47,7 @@ CREATE TABLE projects (
 CREATE TABLE tasks (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     project_id   UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-    title        VARCHAR(200) NOT NULL,
+    title        VARCHAR(500) NOT NULL,
     description  TEXT,
     status       task_status NOT NULL DEFAULT 'todo',
     priority     task_priority NOT NULL DEFAULT 'medium',
@@ -94,10 +99,24 @@ CREATE TABLE comments (
     task_id    UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
     user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     content    TEXT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- set when the author edits the comment; NULL = never edited
+    updated_at TIMESTAMPTZ
 );
 
 CREATE INDEX idx_comments_task ON comments(task_id);
+
+-- ── Task activity log (who changed what, and when) ──────────
+CREATE TABLE task_activity (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    task_id    UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    user_id    UUID REFERENCES users(id) ON DELETE SET NULL,
+    action     VARCHAR(40) NOT NULL,
+    detail     TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_task_activity_task ON task_activity(task_id, created_at DESC);
 
 -- ── Attachments ─────────────────────────────────────────────
 CREATE TABLE attachments (
@@ -125,3 +144,17 @@ CREATE TABLE notifications (
 );
 
 CREATE INDEX idx_notifications_user_unread ON notifications(user_id, is_read);
+
+-- ── Instant notification push (see migrations/015_notification_push.sql) ──
+CREATE OR REPLACE FUNCTION notify_new_notification()
+RETURNS TRIGGER AS $$
+BEGIN
+    PERFORM pg_notify('new_notification', NEW.user_id::text);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_notifications_push
+    AFTER INSERT ON notifications
+    FOR EACH ROW
+    EXECUTE FUNCTION notify_new_notification();

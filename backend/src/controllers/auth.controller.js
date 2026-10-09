@@ -1,6 +1,7 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const pool = require('../config/db');
+const { normalizeLang, LANGS } = require('../config/i18n');
 
 const SALT_ROUNDS = 10;
 const TOKEN_EXPIRY = '7d';
@@ -13,7 +14,7 @@ async function register(req, res) {
   }
 
   try {
-    const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
+    const existing = await pool.query('SELECT id FROM users WHERE LOWER(email) = LOWER($1)', [email.trim()]);
     if (existing.rows.length > 0) {
       return res.status(409).json({ message: 'Email already registered' });
     }
@@ -21,21 +22,19 @@ async function register(req, res) {
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
     const userRole = role === 'pm' ? 'pm' : 'member'; // "admin" can only be granted via the admin panel
 
-    const result = await pool.query(
-      `INSERT INTO users (name, email, password_hash, role)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id, name, email, role, created_at`,
-      [name, email, passwordHash, userRole]
+    // Accounts start unapproved: no token is issued, and login is refused
+    // until an admin approves the account from the Admin page.
+    await pool.query(
+      `INSERT INTO users (name, email, password_hash, role, is_approved, language)
+       VALUES ($1, $2, $3, $4, FALSE, $5)`,
+      // new accounts start in the language the sign-up page was shown in
+      [name.trim(), email.trim().toLowerCase(), passwordHash, userRole, normalizeLang(req.lang)]
     );
 
-    const user = result.rows[0];
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
-      process.env.JWT_SECRET,
-      { expiresIn: TOKEN_EXPIRY }
-    );
-
-    res.status(201).json({ user, token });
+    res.status(201).json({
+      pending: true,
+      message: 'Account created. Please wait for an admin to approve it before logging in.',
+    });
   } catch (err) {
     console.error('Register error:', err.message);
     res.status(500).json({ message: 'Internal server error' });
@@ -51,8 +50,8 @@ async function login(req, res) {
 
   try {
     const result = await pool.query(
-      'SELECT id, name, email, password_hash, role FROM users WHERE email = $1',
-      [email]
+      'SELECT id, name, email, password_hash, role, is_approved, language FROM users WHERE LOWER(email) = LOWER($1)',
+      [email.trim()]
     );
 
     if (result.rows.length === 0) {
@@ -66,6 +65,15 @@ async function login(req, res) {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
+    // Checked only after the password matches, so this message can't be used
+    // to probe which emails have accounts.
+    if (!user.is_approved) {
+      return res.status(403).json({
+        code: 'PENDING_APPROVAL',
+        message: 'Your account is waiting for an admin to approve it. You can log in once it has been approved.',
+      });
+    }
+
     const token = jwt.sign(
       { id: user.id, email: user.email, role: user.role },
       process.env.JWT_SECRET,
@@ -73,7 +81,7 @@ async function login(req, res) {
     );
 
     res.json({
-      user: { id: user.id, name: user.name, email: user.email, role: user.role },
+      user: { id: user.id, name: user.name, email: user.email, role: user.role, language: user.language },
       token,
     });
   } catch (err) {
@@ -92,12 +100,35 @@ async function updateProfile(req, res) {
   try {
     const result = await pool.query(
       `UPDATE users SET name = $1 WHERE id = $2
-       RETURNING id, name, email, role, created_at`,
+       RETURNING id, name, email, role, language, created_at`,
       [name.trim(), req.user.id]
     );
     res.json(result.rows[0]);
   } catch (err) {
     console.error('Update profile error:', err.message);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+// PATCH /auth/me/language — save the interface language ('th' | 'en'); it is
+// also the language this user's notifications and LINE messages are written in
+async function updateLanguage(req, res) {
+  const { language } = req.body;
+  if (!LANGS.includes(language)) {
+    return res.status(400).json({ message: 'language must be "th" or "en"' });
+  }
+
+  try {
+    const result = await pool.query(
+      'UPDATE users SET language = $1 WHERE id = $2 RETURNING language',
+      [language, req.user.id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    res.json({ language: result.rows[0].language });
+  } catch (err) {
+    console.error('Update language error:', err.message);
     res.status(500).json({ message: 'Internal server error' });
   }
 }
@@ -132,4 +163,4 @@ async function changePassword(req, res) {
   }
 }
 
-module.exports = { register, login, updateProfile, changePassword };
+module.exports = { register, login, updateProfile, updateLanguage, changePassword };

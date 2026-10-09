@@ -26,6 +26,28 @@
   margin: 0 0 20px;
 }
 
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 0 0 18px;
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.legendSwatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
 .toolbar {
   display: flex;
   align-items: center;
@@ -63,9 +85,13 @@
   color: var(--color-text-muted);
 }
 
+/* minmax(0, 1fr), not plain 1fr: 1fr columns refuse to shrink below their
+   content's width, so one long task title stretched its column and left the
+   seven days uneven. With a 0 minimum all seven stay exactly equal and long
+   titles are cut with an ellipsis instead. */
 .grid {
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 1px;
   background: var(--color-border);
   border: 1px solid var(--color-border);
@@ -86,6 +112,7 @@
 
 .dayCell {
   background: var(--color-surface);
+  min-width: 0;
   min-height: 96px;
   padding: 6px 7px;
   cursor: pointer;
@@ -129,6 +156,7 @@
   display: flex;
   flex-direction: column;
   gap: 3px;
+  min-width: 0;
 }
 
 .taskChip {
@@ -138,9 +166,28 @@
   padding: 2px 6px;
   font-size: 11px;
   color: var(--color-text);
+  min-width: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* the title itself carries the ellipsis (text-overflow doesn't apply to a
+   bare text node inside a flex container) */
+.taskChipText {
+  min-width: 0;
+  flex: 1;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.projectDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .taskChip:hover {
@@ -205,6 +252,15 @@
   flex: 1;
   font-size: 13px;
   color: var(--color-text);
+}
+
+.rangeProjectTag {
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid;
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
 }
 
 .rangeMeta {

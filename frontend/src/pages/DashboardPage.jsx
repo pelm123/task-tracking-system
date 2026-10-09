@@ -16,11 +16,13 @@ import * as dashboardApi from '../api/dashboard';
 import * as projectsApi from '../api/projects';
 import { useProject } from '../context/ProjectContext';
 import styles from './dashboard.module.css';
+import { colorForProject } from '../utils/projectColor';
+import { timeAgo } from '../utils/dateTime';
+import { t as tr, getLocale } from '../i18n';
 
-const STATUS_LABELS = { todo: 'To Do', in_progress: 'In Progress', review: 'Review', done: 'Done' };
 const STATUS_COLORS = {
   todo: '#8b9490',
-  in_progress: '#c98a3e',
+  in_progress: 'var(--status-in-progress)',
   review: '#6e8fa8',
   done: '#6b9080',
 };
@@ -29,25 +31,75 @@ const PRIORITY_COLORS = { low: '#7c8985', medium: '#c9a63e', high: '#c9603e' };
 const ALL_PROJECTS = 'all';
 const PROJECT_FILTER_STORAGE_KEY = 'dashboardProjectFilter';
 
-// Same deterministic hash-to-color used on the Calendar page and the
-// project switcher, so a given project reads as the same color everywhere.
-function colorForProject(projectId) {
-  if (!projectId) return 'var(--color-text-muted)';
-  let hash = 0;
-  for (let i = 0; i < projectId.length; i++) {
-    hash = (hash * 31 + projectId.charCodeAt(i)) >>> 0;
-  }
-  return `hsl(${hash % 360}, 60%, 55%)`;
+// ---- date range helpers (local calendar dates as 'YYYY-MM-DD') ----
+function toDateStr(d) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-function timeAgo(dateStr) {
-  const diffMs = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diffMs / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
+const RANGE_PRESETS = [
+  {
+    key: 'this-month',
+    labelKey: 'dashboard.thisMonth',
+    range: () => {
+      const n = new Date();
+      return [toDateStr(new Date(n.getFullYear(), n.getMonth(), 1)), toDateStr(new Date(n.getFullYear(), n.getMonth() + 1, 0))];
+    },
+  },
+  {
+    key: 'last-month',
+    labelKey: 'dashboard.lastMonth',
+    range: () => {
+      const n = new Date();
+      return [toDateStr(new Date(n.getFullYear(), n.getMonth() - 1, 1)), toDateStr(new Date(n.getFullYear(), n.getMonth(), 0))];
+    },
+  },
+  {
+    key: 'last-30',
+    labelKey: 'dashboard.last30',
+    range: () => {
+      const n = new Date();
+      return [toDateStr(new Date(n.getFullYear(), n.getMonth(), n.getDate() - 29)), toDateStr(n)];
+    },
+  },
+  {
+    key: 'last-90',
+    labelKey: 'dashboard.last90',
+    range: () => {
+      const n = new Date();
+      return [toDateStr(new Date(n.getFullYear(), n.getMonth(), n.getDate() - 89)), toDateStr(n)];
+    },
+  },
+  {
+    key: 'this-year',
+    labelKey: 'dashboard.thisYear',
+    range: () => {
+      const n = new Date();
+      return [toDateStr(new Date(n.getFullYear(), 0, 1)), toDateStr(new Date(n.getFullYear(), 11, 31))];
+    },
+  },
+];
+
+const RANGE_STORAGE_KEY = 'dashboardDateRange';
+
+function initialRange() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(RANGE_STORAGE_KEY) || 'null');
+    if (saved && /^\d{4}-\d{2}-\d{2}$/.test(saved.from) && /^\d{4}-\d{2}-\d{2}$/.test(saved.to)) return saved;
+  } catch (err) {
+    // ignore — fall back to this month
+  }
+  const [from, to] = RANGE_PRESETS[0].range();
+  return { from, to };
+}
+
+// "1 Oct 2026 – 31 Oct 2026" from two 'YYYY-MM-DD' strings, in the current language
+function formatRangeLabel(from, to) {
+  const fmt = (str) => {
+    const [y, m, d] = str.split('-').map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString(getLocale(), { day: 'numeric', month: 'short', year: 'numeric' });
+  };
+  return `${fmt(from)} – ${fmt(to)}`;
 }
 
 function pct(numerator, denominator) {
@@ -55,16 +107,15 @@ function pct(numerator, denominator) {
   return Math.round((numerator / denominator) * 100);
 }
 
-// One period's report (This Month, or the fiscal year) — stat cards, a
+// One period's report (the selected date range) — stat cards, a
 // status/priority breakdown, and a per-project / per-assignee rundown.
-// Shared between both periods on the "All projects" view.
 function PeriodSection({ title, subtitle, data }) {
   const statusData = Object.entries(data.byStatus).map(([status, count]) => ({
     status,
-    label: STATUS_LABELS[status],
+    label: tr(`status.${status}`),
     count,
   }));
-  const priorityData = Object.entries(data.byPriority).map(([priority, count]) => ({ priority, count }));
+  const priorityData = Object.entries(data.byPriority).map(([priority, count]) => ({ priority, name: tr(`priority.${priority}`), count }));
   const maxProjectTotal = Math.max(1, ...data.byProject.map((p) => p.total));
   const maxAssigneeTotal = Math.max(1, ...data.byAssignee.map((a) => a.total));
 
@@ -78,33 +129,33 @@ function PeriodSection({ title, subtitle, data }) {
       <div className={styles.statCards}>
         <div className={styles.statCard} style={{ '--stat-accent': 'var(--color-accent)' }}>
           <div className={styles.statValue}>{data.totalCreated}</div>
-          <div className={styles.statLabel}>Tasks created</div>
+          <div className={styles.statLabel}>{tr('dashboard.created')}</div>
         </div>
         <div className={styles.statCard} style={{ '--stat-accent': 'var(--status-done)' }}>
           <div className={styles.statValue}>{data.totalCompleted}</div>
-          <div className={styles.statLabel}>Tasks completed</div>
+          <div className={styles.statLabel}>{tr('dashboard.completed')}</div>
         </div>
         <div className={styles.statCard} style={{ '--stat-accent': 'var(--priority-high)' }}>
           <div className={`${styles.statValue} ${data.overdueCount > 0 ? styles.statValueWarn : ''}`}>
             {data.overdueCount}
           </div>
-          <div className={styles.statLabel}>Overdue</div>
+          <div className={styles.statLabel}>{tr('home.statOverdue')}</div>
         </div>
         <div className={styles.statCard} style={{ '--stat-accent': 'var(--color-text-muted)' }}>
           <div className={styles.statValue}>{pct(data.totalCompleted, data.totalCreated)}%</div>
-          <div className={styles.statLabel}>Completion rate</div>
+          <div className={styles.statLabel}>{tr('dashboard.completionRate')}</div>
         </div>
       </div>
 
       <div className={styles.chartGrid}>
         <div className={styles.chartCard}>
-          <p className={styles.chartTitle}>By status</p>
+          <p className={styles.chartTitle}>{tr('dashboard.byStatus')}</p>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={statusData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#3a403e" vertical={false} />
-              <XAxis dataKey="label" stroke="#9aa39e" fontSize={12} />
-              <YAxis stroke="#9aa39e" fontSize={12} allowDecimals={false} />
-              <Tooltip contentStyle={{ background: '#2d3231', border: '1px solid #3a403e', fontSize: 13 }} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+              <XAxis dataKey="label" stroke="var(--color-text-muted)" fontSize={12} />
+              <YAxis stroke="var(--color-text-muted)" fontSize={12} allowDecimals={false} />
+              <Tooltip contentStyle={{ background: 'var(--color-surface-raised)', border: '1px solid var(--color-border)', color: 'var(--color-text)', fontSize: 13 }} />
               <Bar dataKey="count" radius={[4, 4, 0, 0]}>
                 {statusData.map((entry) => (
                   <Cell key={entry.status} fill={STATUS_COLORS[entry.status]} />
@@ -115,16 +166,16 @@ function PeriodSection({ title, subtitle, data }) {
         </div>
 
         <div className={styles.chartCard}>
-          <p className={styles.chartTitle}>By priority</p>
+          <p className={styles.chartTitle}>{tr('dashboard.byPriority')}</p>
           <ResponsiveContainer width="100%" height={200}>
             <PieChart>
-              <Pie data={priorityData} dataKey="count" nameKey="priority" innerRadius={42} outerRadius={68} paddingAngle={3}>
+              <Pie data={priorityData} dataKey="count" nameKey="name" innerRadius={42} outerRadius={68} paddingAngle={3}>
                 {priorityData.map((entry) => (
                   <Cell key={entry.priority} fill={PRIORITY_COLORS[entry.priority]} />
                 ))}
               </Pie>
-              <Legend wrapperStyle={{ fontSize: 12, color: '#9aa39e' }} />
-              <Tooltip contentStyle={{ background: '#2d3231', border: '1px solid #3a403e', fontSize: 13 }} />
+              <Legend wrapperStyle={{ fontSize: 12, color: 'var(--color-text-muted)' }} />
+              <Tooltip contentStyle={{ background: 'var(--color-surface-raised)', border: '1px solid var(--color-border)', color: 'var(--color-text)', fontSize: 13 }} />
             </PieChart>
           </ResponsiveContainer>
         </div>
@@ -132,9 +183,9 @@ function PeriodSection({ title, subtitle, data }) {
 
       <div className={styles.rundownGrid}>
         <div className={styles.chartCard}>
-          <p className={styles.chartTitle}>By project</p>
+          <p className={styles.chartTitle}>{tr('dashboard.byProject')}</p>
           {data.byProject.length === 0 ? (
-            <p className={styles.emptyText}>No tasks in this period.</p>
+            <p className={styles.emptyText}>{tr('dashboard.noTasksPeriod')}</p>
           ) : (
             <div className={styles.rundownList}>
               {data.byProject.map((p) => (
@@ -153,7 +204,7 @@ function PeriodSection({ title, subtitle, data }) {
                     />
                   </div>
                   <span className={styles.rundownCount}>
-                    {p.completed}/{p.total} done
+                    {tr('home.doneOf', { done: p.completed, total: p.total })}
                   </span>
                 </div>
               ))}
@@ -162,9 +213,9 @@ function PeriodSection({ title, subtitle, data }) {
         </div>
 
         <div className={styles.chartCard}>
-          <p className={styles.chartTitle}>By team member</p>
+          <p className={styles.chartTitle}>{tr('dashboard.byMember')}</p>
           {data.byAssignee.length === 0 ? (
-            <p className={styles.emptyText}>No assigned tasks in this period.</p>
+            <p className={styles.emptyText}>{tr('dashboard.noAssignedPeriod')}</p>
           ) : (
             <div className={styles.rundownList}>
               {data.byAssignee.map((a) => (
@@ -179,8 +230,8 @@ function PeriodSection({ title, subtitle, data }) {
                     />
                   </div>
                   <span className={styles.rundownCount}>
-                    {a.total} task{a.total === 1 ? '' : 's'}
-                    {a.overdue > 0 && <span className={styles.rundownOverdue}> · {a.overdue} overdue</span>}
+                    {tr('board.taskCount', { count: a.total })}
+                    {a.overdue > 0 && <span className={styles.rundownOverdue}> · {tr('board.overdueCount', { n: a.overdue })}</span>}
                   </span>
                 </div>
               ))}
@@ -206,7 +257,7 @@ function SingleProjectDashboard({ projectId }) {
     dashboardApi
       .getSummary(projectId)
       .then(setSummary)
-      .catch(() => setError('Could not load dashboard data.'));
+      .catch(() => setError(tr('dashboard.loadFail')));
     projectsApi.getActivity(projectId).then(setActivity).catch(() => {});
   }, [projectId]);
 
@@ -214,15 +265,15 @@ function SingleProjectDashboard({ projectId }) {
     return <p style={{ color: 'var(--priority-high)' }}>{error}</p>;
   }
   if (!summary) {
-    return <p className={styles.subLine}>Loading…</p>;
+    return <p className={styles.subLine}>{tr('common.loading')}</p>;
   }
 
   const statusData = Object.entries(summary.byStatus).map(([status, count]) => ({
     status,
-    label: STATUS_LABELS[status],
+    label: tr(`status.${status}`),
     count,
   }));
-  const priorityData = Object.entries(summary.byPriority).map(([priority, count]) => ({ priority, count }));
+  const priorityData = Object.entries(summary.byPriority).map(([priority, count]) => ({ priority, name: tr(`priority.${priority}`), count }));
   const assigneeData = summary.byAssignee.map((a) => ({ name: a.name.split(' ')[0], count: a.count }));
 
   return (
@@ -230,33 +281,33 @@ function SingleProjectDashboard({ projectId }) {
       <div className={styles.statCards}>
         <div className={styles.statCard} style={{ '--stat-accent': 'var(--color-text-muted)' }}>
           <div className={styles.statValue}>{summary.totalTasks}</div>
-          <div className={styles.statLabel}>Total tasks</div>
+          <div className={styles.statLabel}>{tr('dashboard.totalTasks')}</div>
         </div>
         <div className={styles.statCard} style={{ '--stat-accent': 'var(--status-done)' }}>
           <div className={styles.statValue}>{summary.byStatus.done}</div>
-          <div className={styles.statLabel}>Completed</div>
+          <div className={styles.statLabel}>{tr('dashboard.completedShort')}</div>
         </div>
         <div className={styles.statCard} style={{ '--stat-accent': 'var(--status-in-progress)' }}>
           <div className={styles.statValue}>{summary.byStatus.in_progress}</div>
-          <div className={styles.statLabel}>In progress</div>
+          <div className={styles.statLabel}>{tr('status.in_progress')}</div>
         </div>
         <div className={styles.statCard} style={{ '--stat-accent': 'var(--priority-high)' }}>
           <div className={`${styles.statValue} ${summary.overdueCount > 0 ? styles.statValueWarn : ''}`}>
             {summary.overdueCount}
           </div>
-          <div className={styles.statLabel}>Overdue</div>
+          <div className={styles.statLabel}>{tr('home.statOverdue')}</div>
         </div>
       </div>
 
       <div className={styles.chartGrid}>
         <div className={styles.chartCard}>
-          <p className={styles.chartTitle}>Tasks by status</p>
+          <p className={styles.chartTitle}>{tr('dashboard.tasksByStatus')}</p>
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={statusData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#3a403e" vertical={false} />
-              <XAxis dataKey="label" stroke="#9aa39e" fontSize={12} />
-              <YAxis stroke="#9aa39e" fontSize={12} allowDecimals={false} />
-              <Tooltip contentStyle={{ background: '#2d3231', border: '1px solid #3a403e', fontSize: 13 }} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+              <XAxis dataKey="label" stroke="var(--color-text-muted)" fontSize={12} />
+              <YAxis stroke="var(--color-text-muted)" fontSize={12} allowDecimals={false} />
+              <Tooltip contentStyle={{ background: 'var(--color-surface-raised)', border: '1px solid var(--color-border)', color: 'var(--color-text)', fontSize: 13 }} />
               <Bar dataKey="count" radius={[4, 4, 0, 0]}>
                 {statusData.map((entry) => (
                   <Cell key={entry.status} fill={STATUS_COLORS[entry.status]} />
@@ -267,38 +318,38 @@ function SingleProjectDashboard({ projectId }) {
         </div>
 
         <div className={styles.chartCard}>
-          <p className={styles.chartTitle}>Tasks by priority</p>
+          <p className={styles.chartTitle}>{tr('dashboard.tasksByPriority')}</p>
           <ResponsiveContainer width="100%" height={240}>
             <PieChart>
-              <Pie data={priorityData} dataKey="count" nameKey="priority" innerRadius={50} outerRadius={80} paddingAngle={3}>
+              <Pie data={priorityData} dataKey="count" nameKey="name" innerRadius={50} outerRadius={80} paddingAngle={3}>
                 {priorityData.map((entry) => (
                   <Cell key={entry.priority} fill={PRIORITY_COLORS[entry.priority]} />
                 ))}
               </Pie>
-              <Legend wrapperStyle={{ fontSize: 12, color: '#9aa39e' }} />
-              <Tooltip contentStyle={{ background: '#2d3231', border: '1px solid #3a403e', fontSize: 13 }} />
+              <Legend wrapperStyle={{ fontSize: 12, color: 'var(--color-text-muted)' }} />
+              <Tooltip contentStyle={{ background: 'var(--color-surface-raised)', border: '1px solid var(--color-border)', color: 'var(--color-text)', fontSize: 13 }} />
             </PieChart>
           </ResponsiveContainer>
         </div>
 
         <div className={`${styles.chartCard} ${styles.fullWidth}`}>
-          <p className={styles.chartTitle}>Open tasks per team member</p>
+          <p className={styles.chartTitle}>{tr('dashboard.openPerMember')}</p>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={assigneeData} layout="vertical" margin={{ left: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#3a403e" horizontal={false} />
-              <XAxis type="number" stroke="#9aa39e" fontSize={12} allowDecimals={false} />
-              <YAxis type="category" dataKey="name" stroke="#9aa39e" fontSize={12} width={80} />
-              <Tooltip contentStyle={{ background: '#2d3231', border: '1px solid #3a403e', fontSize: 13 }} />
-              <Bar dataKey="count" fill="#c98a3e" radius={[0, 4, 4, 0]} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" horizontal={false} />
+              <XAxis type="number" stroke="var(--color-text-muted)" fontSize={12} allowDecimals={false} />
+              <YAxis type="category" dataKey="name" stroke="var(--color-text-muted)" fontSize={12} width={80} />
+              <Tooltip contentStyle={{ background: 'var(--color-surface-raised)', border: '1px solid var(--color-border)', color: 'var(--color-text)', fontSize: 13 }} />
+              <Bar dataKey="count" fill="var(--color-accent)" radius={[0, 4, 4, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
       </div>
 
       <div className={styles.chartCard} style={{ marginTop: 20 }}>
-        <p className={styles.chartTitle}>Recent activity</p>
+        <p className={styles.chartTitle}>{tr('dashboard.recentActivity')}</p>
         {activity.length === 0 ? (
-          <p className={styles.emptyText}>Nothing yet.</p>
+          <p className={styles.emptyText}>{tr('dashboard.nothingYet')}</p>
         ) : (
           <div>
             {activity.map((a, i) => (
@@ -308,7 +359,7 @@ function SingleProjectDashboard({ projectId }) {
                     className={styles.activityDot}
                     style={{ background: a.type === 'task_created' ? 'var(--status-done)' : 'var(--status-review)' }}
                   />
-                  <strong>{a.actor_name}</strong> {a.type === 'task_created' ? 'created' : 'commented on'}{' '}
+                  <strong>{a.actor_name}</strong> {a.type === 'task_created' ? tr('dashboard.created_') : tr('dashboard.commentedOn')}{' '}
                   <span style={{ color: 'var(--color-accent)' }}>{a.task_title}</span>
                 </span>
                 <span className={styles.activityTime}>{timeAgo(a.at)}</span>
@@ -328,6 +379,7 @@ export default function DashboardPage() {
   );
   const [overview, setOverview] = useState(null);
   const [overviewError, setOverviewError] = useState('');
+  const [range, setRange] = useState(initialRange);
 
   const showingAllProjects = projectFilter === ALL_PROJECTS;
 
@@ -336,28 +388,49 @@ export default function DashboardPage() {
     localStorage.setItem(PROJECT_FILTER_STORAGE_KEY, value);
   }
 
+  function updateRange(next) {
+    setRange(next);
+    try {
+      localStorage.setItem(RANGE_STORAGE_KEY, JSON.stringify(next));
+    } catch (err) {
+      // storage blocked — the range just won't be remembered
+    }
+  }
+
+  const rangeInvalid = !range.from || !range.to || range.from > range.to;
+  const activePreset = RANGE_PRESETS.find((p) => {
+    const [f, to] = p.range();
+    return f === range.from && to === range.to;
+  });
+
   useEffect(() => {
-    if (!showingAllProjects) return;
+    if (!showingAllProjects || rangeInvalid) return;
     setOverview(null);
     setOverviewError('');
+    let cancelled = false;
     dashboardApi
-      .getOverview()
-      .then(setOverview)
-      .catch(() => setOverviewError('Could not load the consolidated report.'));
-  }, [showingAllProjects]);
+      .getOverview(range.from, range.to)
+      .then((data) => !cancelled && setOverview(data))
+      .catch((err) =>
+        !cancelled && setOverviewError(err.response?.data?.message || tr('dashboard.overviewFail'))
+      );
+    return () => {
+      cancelled = true;
+    };
+  }, [showingAllProjects, range.from, range.to, rangeInvalid]);
 
   if (projects.length === 0) {
     return (
       <div className={styles.dashScreen}>
-        <h1>Dashboard</h1>
-        <p className={styles.subLine}>No projects yet.</p>
+        <h1>{tr('nav.dashboard')}</h1>
+        <p className={styles.subLine}>{tr('calendar.noProjects')}</p>
       </div>
     );
   }
 
   const headerTitle = showingAllProjects
-    ? 'All Projects'
-    : projects.find((p) => p.id === projectFilter)?.name || 'Dashboard';
+    ? tr('calendar.allProjectsTitle')
+    : projects.find((p) => p.id === projectFilter)?.name || tr('nav.dashboard');
 
   return (
     <div className={styles.dashScreen}>
@@ -366,14 +439,14 @@ export default function DashboardPage() {
           <h1>{headerTitle}</h1>
           <p className={styles.subLine}>
             {showingAllProjects
-              ? 'A consolidated snapshot across every project — this month and this fiscal year.'
-              : 'A snapshot of where this project stands right now.'}
+              ? tr('dashboard.subAll')
+              : tr('dashboard.subOne')}
           </p>
         </div>
         <label className={styles.rangeLabel}>
-          Showing
+          {tr('calendar.showing')}
           <select value={projectFilter} onChange={(e) => handleProjectFilterChange(e.target.value)}>
-            <option value={ALL_PROJECTS}>All projects</option>
+            <option value={ALL_PROJECTS}>{tr('calendar.allProjects')}</option>
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
                 {p.name}
@@ -383,36 +456,77 @@ export default function DashboardPage() {
         </label>
       </div>
 
+      {showingAllProjects && (
+        <div className={styles.rangeBar}>
+          <div className={styles.presetChips}>
+            {RANGE_PRESETS.map((p) => (
+              <button
+                key={p.key}
+                type="button"
+                className={`${styles.presetChip} ${activePreset?.key === p.key ? styles.presetChipActive : ''}`}
+                onClick={() => {
+                  const [from, to] = p.range();
+                  updateRange({ from, to });
+                }}
+              >
+                {tr(p.labelKey)}
+              </button>
+            ))}
+          </div>
+          <div className={styles.rangeInputs}>
+            <label className={styles.rangeLabel}>
+              {tr('calendar.from')}
+              <input
+                type="date"
+                value={range.from}
+                max={range.to || undefined}
+                onChange={(e) => updateRange({ ...range, from: e.target.value })}
+              />
+            </label>
+            <label className={styles.rangeLabel}>
+              {tr('calendar.to')}
+              <input
+                type="date"
+                value={range.to}
+                min={range.from || undefined}
+                onChange={(e) => updateRange({ ...range, to: e.target.value })}
+              />
+            </label>
+          </div>
+        </div>
+      )}
+
       {showingAllProjects ? (
-        overviewError ? (
+        rangeInvalid ? (
+          <p className={styles.subLine}>{tr('dashboard.pickRange')}</p>
+        ) : overviewError ? (
           <p style={{ color: 'var(--priority-high)' }}>{overviewError}</p>
         ) : !overview ? (
-          <p className={styles.subLine}>Loading…</p>
+          <p className={styles.subLine}>{tr('common.loading')}</p>
         ) : (
           <>
             <div className={styles.statCards}>
               <div className={styles.statCard} style={{ '--stat-accent': 'var(--color-text-muted)' }}>
                 <div className={styles.statValue}>{overview.totals.projects}</div>
-                <div className={styles.statLabel}>Projects</div>
+                <div className={styles.statLabel}>{tr('home.projects')}</div>
               </div>
               <div className={styles.statCard} style={{ '--stat-accent': 'var(--color-accent)' }}>
                 <div className={styles.statValue}>{overview.totals.tasks}</div>
-                <div className={styles.statLabel}>Total tasks (all time)</div>
+                <div className={styles.statLabel}>{tr('dashboard.totalAll')}</div>
               </div>
               <div className={styles.statCard} style={{ '--stat-accent': 'var(--status-done)' }}>
                 <div className={styles.statValue}>{overview.totals.completed}</div>
-                <div className={styles.statLabel}>Completed (all time)</div>
+                <div className={styles.statLabel}>{tr('dashboard.completedAll')}</div>
               </div>
               <div className={styles.statCard} style={{ '--stat-accent': 'var(--priority-high)' }}>
                 <div className={`${styles.statValue} ${overview.totals.overdue > 0 ? styles.statValueWarn : ''}`}>
                   {overview.totals.overdue}
                 </div>
-                <div className={styles.statLabel}>Overdue right now</div>
+                <div className={styles.statLabel}>{tr('dashboard.overdueNow')}</div>
               </div>
             </div>
 
-            <PeriodSection title="This Month" subtitle={overview.month.label} data={overview.month} />
-            <PeriodSection title="Fiscal Year" subtitle={overview.fiscalYear.label} data={overview.fiscalYear} />
+            <PeriodSection title={tr('dashboard.selectedPeriod')} subtitle={formatRangeLabel(range.from, range.to)} data={overview.period} />
           </>
         )
       ) : (

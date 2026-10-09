@@ -1,69 +1,84 @@
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import ProjectSwitcher from './ProjectSwitcher';
 import NotificationBell from './NotificationBell';
+import { useTheme } from '../context/ThemeContext';
+import { useLang } from '../context/LanguageContext';
 import styles from './appHeader.module.css';
 
 export default function AppHeader() {
   const { user, logout } = useAuth();
-  const canManageProjects = ['admin', 'pm'].includes(user?.role);
-  const { pathname } = useLocation();
-  // The project switcher only drives the Board; every other page either spans
-  // all projects or has its own filter, so it's hidden there.
-  const showProjectSwitcher = pathname.startsWith('/board');
-
+  const { theme, toggleTheme } = useTheme();
+  const { lang, toggleLang, t } = useLang();
   return (
     <div className={styles.header}>
       <div className={styles.left}>
         <NavLink to="/home" className={styles.brand} style={{ textDecoration: 'none' }}>
-          Task Tracker
+          {t('nav.brand')}
         </NavLink>
-
-        {showProjectSwitcher && <ProjectSwitcher canManageProjects={canManageProjects} />}
 
         <nav className={styles.nav}>
           <NavLink
             to="/home"
             className={({ isActive }) => `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`}
           >
-            Home
+            {t('nav.home')}
           </NavLink>
           <NavLink
             to="/board"
             className={({ isActive }) => `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`}
           >
-            Board
+            {t('nav.board')}
           </NavLink>
           <NavLink
             to="/calendar"
             className={({ isActive }) => `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`}
           >
-            Calendar
+            {t('nav.calendar')}
           </NavLink>
           <NavLink
             to="/dashboard"
             className={({ isActive }) => `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`}
           >
-            Dashboard
+            {t('nav.dashboard')}
           </NavLink>
           {['admin', 'pm'].includes(user?.role) && (
             <NavLink
               to="/admin"
               className={({ isActive }) => `${styles.navLink} ${isActive ? styles.navLinkActive : ''}`}
             >
-              Admin
+              {t('nav.admin')}
             </NavLink>
           )}
         </nav>
       </div>
 
       <div className={styles.right}>
+        <button
+          type="button"
+          className={styles.themeBtn}
+          onClick={toggleTheme}
+          title={theme === 'dark' ? t('header.switchToLight') : t('header.switchToDark')}
+          aria-label={theme === 'dark' ? t('header.switchToLight') : t('header.switchToDark')}
+        >
+          <span aria-hidden="true">{theme === 'dark' ? '☀' : '☾'}</span>
+          {theme === 'dark' ? t('header.lightMode') : t('header.darkMode')}
+        </button>
+        <button
+          type="button"
+          className={styles.themeBtn}
+          onClick={toggleLang}
+          title={t('header.switchLanguage')}
+          aria-label={t('header.switchLanguage')}
+        >
+          <span aria-hidden="true">🌐</span>
+          {lang === 'th' ? 'ไทย' : 'EN'}
+        </button>
         <NotificationBell />
         <NavLink to="/profile" className={styles.userLabel} style={{ textDecoration: 'none' }}>
-          {user?.name} · {user?.role}
+          {user?.name} · {t(`roles.${user?.role}`)}
         </NavLink>
         <button className="btn btn-ghost" onClick={logout}>
-          Log out
+          {t('header.logout')}
         </button>
       </div>
     </div>

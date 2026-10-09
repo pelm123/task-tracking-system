@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const pool = require('../config/db');
 const { verifySignature, pushToLine } = require('../config/line');
+const { tr } = require('../config/i18n');
 
 // GET /line/link-code — authenticated user gets (or reuses) a short code to
 // send to the LINE bot, which links their LINE account to this app account
@@ -28,7 +29,7 @@ async function getLinkCode(req, res) {
   }
 }
 
-const NOTIFICATION_TYPES = ['assigned', 'status_change', 'comment', 'due_soon', 'approved', 'approval_denied'];
+const NOTIFICATION_TYPES = ['assigned', 'status_change', 'comment', 'due_soon', 'approved', 'approval_denied', 'overdue'];
 
 // GET /line/preferences — which notification types currently push to LINE
 // for this user (independent of whether they're actually linked yet)
@@ -121,12 +122,13 @@ async function handleWebhook(req, res) {
         const result = await pool.query(
           `UPDATE users SET line_user_id = $1, line_link_code = NULL
            WHERE line_link_code = $2
-           RETURNING id, name`,
+           RETURNING id, name, language`,
           [lineUserId, text]
         );
 
         if (result.rows.length > 0) {
-          await pushToLine(lineUserId, `Linked! You'll now get Task Tracker notifications here, ${result.rows[0].name}.`);
+          const { name, language } = result.rows[0];
+          await pushToLine(lineUserId, tr(language, 'lineLinked', { name }));
         }
         // if no match, silently ignore — likely just a random message to the bot
       } catch (err) {

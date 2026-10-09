@@ -1,5 +1,8 @@
 import { useState } from 'react';
+import { t } from '../i18n';
 import styles from './modal.module.css';
+
+const MAX_NAME_LENGTH = 500; // keep in sync with the backend / projects.name
 
 export default function NewProjectModal({ onClose, onCreate }) {
   const [name, setName] = useState('');
@@ -10,7 +13,7 @@ export default function NewProjectModal({ onClose, onCreate }) {
   async function handleSubmit(e) {
     e.preventDefault();
     if (!name.trim()) {
-      setError('Name is required');
+      setError(t('modal.nameRequired'));
       return;
     }
     setSaving(true);
@@ -19,7 +22,7 @@ export default function NewProjectModal({ onClose, onCreate }) {
       await onCreate({ name: name.trim(), description: description.trim() || undefined });
       onClose();
     } catch (err) {
-      setError(err.response?.data?.message || 'Could not create project');
+      setError(err.response?.data?.message || t('modal.createProjectFail'));
     } finally {
       setSaving(false);
     }
@@ -29,7 +32,7 @@ export default function NewProjectModal({ onClose, onCreate }) {
     <div className={styles.overlay} onClick={onClose}>
       <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
         <div className={styles.modalHeader}>
-          <h2>New project</h2>
+          <h2>{t('modal.newProject')}</h2>
           <button className={styles.closeBtn} onClick={onClose}>
             ✕
           </button>
@@ -37,16 +40,29 @@ export default function NewProjectModal({ onClose, onCreate }) {
 
         <form onSubmit={handleSubmit}>
           <div className={styles.field}>
-            <label htmlFor="pName">Name</label>
-            <input id="pName" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+            <label htmlFor="pName">{t('modal.name')}</label>
+            <input
+              id="pName"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={t('modal.namePlaceholder')}
+              maxLength={MAX_NAME_LENGTH}
+              autoFocus
+            />
+            {name.length > MAX_NAME_LENGTH * 0.8 && (
+              <span style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4, display: 'block', textAlign: 'right' }}>
+                {name.length}/{MAX_NAME_LENGTH}
+              </span>
+            )}
           </div>
 
           <div className={styles.field}>
-            <label htmlFor="pDescription">Description</label>
+            <label htmlFor="pDescription">{t('modal.description')}</label>
             <textarea
               id="pDescription"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
+              placeholder={t('modal.projectDescPlaceholder')}
             />
           </div>
 
@@ -54,10 +70,10 @@ export default function NewProjectModal({ onClose, onCreate }) {
 
           <div className={styles.formActions}>
             <button type="button" className={styles.btnGhost} onClick={onClose}>
-              Cancel
+              {t('common.cancel')}
             </button>
             <button type="submit" className={styles.btnPrimary} disabled={saving}>
-              {saving ? 'Creating…' : 'Create project'}
+              {saving ? t('modal.creating') : t('modal.createProject')}
             </button>
           </div>
         </form>

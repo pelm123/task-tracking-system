@@ -1,18 +1,19 @@
+import { t, getLocale } from '../i18n';
+
 // Shared helpers for the due-date countdown + custom reminder lead time,
 // used by TaskCard, TaskDetailModal, NewTaskModal, and CalendarPage.
 
 // Preset options for "remind me before due date". Hours must match what the
 // backend accepts (an integer, 1–720). A custom number can still be typed
 // in directly — this list is just the common shortcuts.
-export const REMINDER_PRESETS = [
-  { hours: 1, label: '1 hour before' },
-  { hours: 3, label: '3 hours before' },
-  { hours: 12, label: '12 hours before' },
-  { hours: 24, label: '1 day before' },
-  { hours: 48, label: '2 days before' },
-  { hours: 72, label: '3 days before' },
-  { hours: 168, label: '1 week before' },
-];
+// `label` is a getter so it follows the current language.
+const preset = (hours) => ({
+  hours,
+  get label() {
+    return t(`reminders.h${hours}`);
+  },
+});
+export const REMINDER_PRESETS = [1, 3, 12, 24, 48, 72, 168].map(preset);
 
 export const DEFAULT_REMINDER_HOURS = 24;
 
@@ -72,10 +73,10 @@ export function isOverdue(dueDate, status, now = new Date()) {
 export function formatOverdueShort(dueDate, now = new Date()) {
   const mins = Math.max(1, Math.floor((now.getTime() - new Date(dueDate).getTime()) / 60000));
   const days = Math.floor(mins / 1440);
-  if (days > 0) return `${days}d`;
+  if (days > 0) return `${days}${t('units.d')}`;
   const hours = Math.floor(mins / 60);
-  if (hours > 0) return `${hours}h`;
-  return `${mins}m`;
+  if (hours > 0) return `${hours}${t('units.h')}`;
+  return `${mins}${t('units.m')}`;
 }
 
 // Returns { label, overdue, urgent } describing how far `dueDate` is from
@@ -94,17 +95,37 @@ export function getDueCountdown(dueDate, now = new Date()) {
   const minutes = absMinutes % 60;
 
   let text;
+  const D = t('units.d');
+  const H = t('units.h');
+  const M = t('units.m');
   if (days > 0) {
-    text = hours > 0 ? `${days}d ${hours}h` : `${days}d`;
+    text = hours > 0 ? `${days}${D} ${hours}${H}` : `${days}${D}`;
   } else if (hours > 0) {
-    text = minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+    text = minutes > 0 ? `${hours}${H} ${minutes}${M}` : `${hours}${H}`;
   } else {
-    text = `${minutes}m`;
+    text = `${minutes}${M}`;
   }
 
   return {
-    label: overdue ? `Overdue by ${text}` : `Due in ${text}`,
+    label: overdue ? t('dates.overdueBy', { text }) : t('dates.dueIn', { text }),
     overdue,
     urgent: !overdue && diffMs <= 24 * 60 * 60 * 1000,
   };
+}
+
+// Absolute due date for display next to (or instead of) the countdown, e.g.
+// "Thu, Oct 9 · 6:00 PM". The year is added only when it isn't the current
+// year, so most dates stay short. Uses the browser's local time, like the
+// date/time pickers do.
+export function formatDueDateShort(dueDate, now = new Date()) {
+  if (!dueDate) return '';
+  const d = new Date(dueDate);
+  const date = d.toLocaleDateString(getLocale(), {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    ...(d.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {}),
+  });
+  const time = d.toLocaleTimeString(getLocale(), { hour: 'numeric', minute: '2-digit' });
+  return `${date} · ${time}`;
 }

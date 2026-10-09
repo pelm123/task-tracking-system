@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import * as commentsApi from '../api/comments';
 import * as attachmentsApi from '../api/attachments';
+import * as tasksApi from '../api/tasks';
 import {
   REMINDER_PRESETS,
   DEFAULT_REMINDER_HOURS,
@@ -10,19 +11,66 @@ import {
   toTimeInputValue,
   dateInputToDueTimestamp,
 } from '../utils/dueDate';
+import { formatDateTime, timeAgo } from '../utils/dateTime';
+import { t, getLocale } from '../i18n';
 import styles from './modal.module.css';
 
-function timeAgo(dateStr) {
-  const diffMs = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diffMs / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
+const MAX_UPLOAD_MB = 200; // keep in sync with backend middleware/upload.js (UPLOAD_MAX_MB)
+const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
+
+// Activity details are stored language-neutral (JSON) so they can be shown in
+// whichever language the viewer is using. Older rows, and file names, are
+// plain text and shown as they are.
+const LEGACY_STATUS = { 'To Do': 'todo', 'In Progress': 'in_progress', Review: 'review', Done: 'done' };
+function describeLegacyDetail(detail) {
+  // rows written before details became language-neutral, e.g. "To Do → In Progress"
+  const m = /^(To Do|In Progress|Review|Done)? ?→ (To Do|In Progress|Review|Done)(?:: ([\s\S]*))?$/.exec(detail);
+  if (!m) return detail;
+  const to = t(`status.${LEGACY_STATUS[m[2]]}`);
+  const move = m[1] ? `${t(`status.${LEGACY_STATUS[m[1]]}`)} → ${to}` : `→ ${to}`;
+  return m[3] ? `${move}: ${m[3]}` : move;
 }
 
-const MAX_UPLOAD_BYTES = 20 * 1024 * 1024; // keep in sync with backend middleware/upload.js
+function describeActivityDetail(detail) {
+  let d = null;
+  try {
+    d = JSON.parse(detail);
+  } catch (err) {
+    return describeLegacyDetail(detail);
+  }
+  if (!d || typeof d !== 'object') return detail;
+
+  const status = (s) => (s ? t(`status.${s}`) : '');
+  if (Array.isArray(d.changes)) {
+    return d.changes
+      .map((c) => {
+        switch (c.k) {
+          case 'title':
+            return t('activityDetail.title', { value: c.v });
+          case 'priority':
+            return t('activityDetail.priority', { value: t(`priority.${c.v}`) });
+          case 'due':
+            return t('activityDetail.due', { value: formatDateTime(c.v) });
+          case 'assignees':
+            return t('activityDetail.assignees', {
+              value: (c.v || []).join(', ') || t('activityDetail.nobody'),
+            });
+          case 'description':
+          case 'reminder':
+            return t(`activityDetail.${c.k}`);
+          default:
+            return '';
+        }
+      })
+      .filter(Boolean)
+      .join('; ');
+  }
+  if (d.to) {
+    const move = d.from ? `${status(d.from)} → ${status(d.to)}` : `→ ${status(d.to)}`;
+    return d.reason ? `${move}: ${d.reason}` : move;
+  }
+  return detail;
+}
 
 export default function TaskDetailModal({ task, users, onClose, onUpdate, onDelete, canApprove, onApprove, onDeny }) {
   const { user: currentUser } = useAuth();
@@ -60,11 +108,30 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
   // upload files to it — only a PM/admin assigning them changes that.
   // Mirrors the backend checks in updateTask/createComment/uploadAttachment.
   const isUnassignedMember = currentUser.role === 'member' && !isAssignee && !isCreator;
+  // Files (preview AND download): only admin/pm, assignees and the creator.
+  // Anyone else can see that files are attached but can't open them. Mirrors
+  // the backend check (canOpenFiles in attachment.controller.js).
+  const canOpenFiles = !isUnassignedMember;
   // admin/pm can delete any task; a member can delete only a task they
   // created themselves — mirrors the backend check in deleteTask
   const canDelete = canApprove || task.created_by === currentUser.id;
 
+  // A plain member who's on the task can bring in fellow members to help, but
+  // can't remove anyone or add a PM/admin — only PM/admin can. Mirrors the
+  // backend check (checkMemberAssigneeChange in task.controller.js).
+  const isMemberRole = currentUser.role === 'member';
+  const originalAssigneeIds = (task.assignees || []).map((a) => a.id);
+  function assigneeLockReason(u) {
+    if (isUnassignedMember) return t('detail.lockUnassigned');
+    if (!isMemberRole) return null;
+    if (originalAssigneeIds.includes(u.id)) return t('detail.lockRemove');
+    if (u.role !== 'member') return t('detail.lockAddMembers');
+    return null;
+  }
+
   function toggleAssignee(userId) {
+    const person = users.find((u) => u.id === userId);
+    if (person && assigneeLockReason(person)) return;
     setAssigneeIds((prev) =>
       prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
     );
@@ -77,6 +144,7 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
   const [editDraft, setEditDraft] = useState('');
 
   const [attachments, setAttachments] = useState([]);
+  const [activity, setActivity] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [pendingFile, setPendingFile] = useState(null); // chosen but not yet saved
   const [preview, setPreview] = useState(null); // { url, mimeType, name }
@@ -90,6 +158,18 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
       if (preview) window.URL.revokeObjectURL(preview.url);
     };
   }, [preview]);
+
+  function loadActivity() {
+    tasksApi
+      .listTaskActivity(task.id)
+      .then(setActivity)
+      .catch(() => {}); // the log is informational — never block the modal on it
+  }
+
+  // Edits made by anyone (real-time sync bumps updated_at) refresh the log.
+  useEffect(() => {
+    loadActivity();
+  }, [task.updated_at]);
 
   // Only (re)load comments/attachments when switching to a different task —
   // NOT on every task.updated_at change. That used to also be a dependency
@@ -108,6 +188,7 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
       .then(setComments)
       .finally(() => setLoadingComments(false));
     attachmentsApi.listAttachments(task.id).then(setAttachments);
+    loadActivity();
     setPendingFile(null); // a staged file belongs to the task it was chosen on
     if (fileInputRef.current) fileInputRef.current.value = '';
   }, [task.id]);
@@ -148,19 +229,19 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
         assignee_ids: isUnassignedMember ? (task.assignees || []).map((a) => a.id) : assigneeIds,
       });
     } catch (err) {
-      setError(err.response?.data?.message || 'Could not save changes');
+      setError(err.response?.data?.message || t('detail.errSave'));
     } finally {
       setSaving(false);
     }
   }
 
   async function handleDelete() {
-    if (!window.confirm('Delete this task? This cannot be undone.')) return;
+    if (!window.confirm(t('detail.confirmDeleteTask'))) return;
     try {
       await onDelete(task.id);
       onClose();
     } catch (err) {
-      setError('Could not delete task');
+      setError(t('detail.errDelete'));
     }
   }
 
@@ -173,7 +254,7 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
       setComments((prev) => [...prev, { ...created, author_name: currentUser.name }]);
       setCommentDraft('');
     } catch (err) {
-      setError('Could not post comment');
+      setError(t('detail.errPost'));
     }
   }
 
@@ -187,20 +268,20 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
     if (!content) return;
     try {
       const updated = await commentsApi.updateComment(commentId, content);
-      setComments((prev) => prev.map((c) => (c.id === commentId ? { ...c, content: updated.content } : c)));
+      setComments((prev) => prev.map((c) => (c.id === commentId ? { ...c, content: updated.content, updated_at: updated.updated_at } : c)));
       setEditingCommentId(null);
     } catch (err) {
-      setError('Could not save comment edit');
+      setError(t('detail.errCommentEdit'));
     }
   }
 
   async function handleDeleteComment(commentId) {
-    if (!window.confirm('Delete this comment?')) return;
+    if (!window.confirm(t('detail.confirmDeleteComment'))) return;
     try {
       await commentsApi.deleteComment(commentId);
       setComments((prev) => prev.filter((c) => c.id !== commentId));
     } catch (err) {
-      setError('Could not delete comment');
+      setError(t('detail.errCommentDelete'));
     }
   }
 
@@ -209,7 +290,7 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > MAX_UPLOAD_BYTES) {
-      setError('That file is larger than 20 MB. Please choose a smaller one.');
+      setError(t('detail.errTooLarge', { mb: MAX_UPLOAD_MB }));
       if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
@@ -227,11 +308,12 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
     setUploading(true);
     try {
       const created = await attachmentsApi.uploadAttachment(task.id, pendingFile);
-      setAttachments((prev) => [created, ...prev]);
+      setAttachments((prev) => [{ ...created, uploader_name: created.uploader_name || currentUser.name }, ...prev]);
       setPendingFile(null);
+      loadActivity();
     } catch (err) {
       // Keep the staged file so the user can retry or cancel.
-      setError(err.response?.data?.message || 'Could not upload file');
+      setError(err.response?.data?.message || t('detail.errUpload'));
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -239,16 +321,21 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
   }
 
   async function handleDownload(att) {
+    if (!canOpenFiles) return;
     try {
       await attachmentsApi.downloadAttachment(att.id, att.file_name);
     } catch (err) {
-      setError('Could not download file');
+      setError(t('detail.errDownload'));
     }
   }
 
   // Clicking an image/PDF's name opens it in the in-app preview modal;
   // anything else just downloads, same as before.
   async function handleOpenAttachment(att) {
+    if (!canOpenFiles) {
+      setError(t('detail.errOpenFiles'));
+      return;
+    }
     if (!attachmentsApi.isPreviewable(att.mime_type)) {
       return handleDownload(att);
     }
@@ -257,7 +344,7 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
       const url = await attachmentsApi.getPreviewUrl(att.id);
       setPreview({ id: att.id, url, mimeType: att.mime_type, name: att.file_name });
     } catch (err) {
-      setError('Could not preview file');
+      setError(t('detail.errPreview'));
     } finally {
       setPreviewLoading(false);
     }
@@ -276,12 +363,13 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
   }
 
   async function handleDeleteAttachment(att) {
-    if (!window.confirm(`Delete "${att.file_name}"? This cannot be undone.`)) return;
+    if (!window.confirm(t('detail.confirmDeleteFile', { name: att.file_name }))) return;
     try {
       await attachmentsApi.deleteAttachment(att.id);
       setAttachments((prev) => prev.filter((a) => a.id !== att.id));
+      loadActivity();
     } catch (err) {
-      setError(err.response?.data?.message || 'Could not delete file');
+      setError(err.response?.data?.message || t('detail.errFileDelete'));
     }
   }
 
@@ -289,7 +377,7 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
     <div className={styles.overlay} onClick={onClose}>
       <div className={`${styles.modal} ${styles.modalWide}`} onClick={(e) => e.stopPropagation()}>
         <div className={styles.modalHeader}>
-          <h2>Task details</h2>
+          <h2>{t('detail.heading')}</h2>
           <button className={styles.closeBtn} onClick={onClose}>
             ✕
           </button>
@@ -297,22 +385,23 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
 
         {isUnassignedMember && (
           <p className={styles.emptyText} style={{ margin: '0 0 12px' }}>
-            You're not assigned to this task, so you can view it but can't edit it.
+            {t('detail.viewOnly')}
           </p>
         )}
 
         <div className={styles.field}>
-          <label htmlFor="dTitle">Title</label>
+          <label htmlFor="dTitle">{t('modal.title')}</label>
           <input
             id="dTitle"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
+            maxLength={500}
             disabled={isUnassignedMember}
           />
         </div>
 
         <div className={styles.field}>
-          <label htmlFor="dDescription">Description</label>
+          <label htmlFor="dDescription">{t('modal.description')}</label>
           <textarea
             id="dDescription"
             value={description}
@@ -323,28 +412,28 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
 
         <div className={styles.row}>
           <div className={styles.field}>
-            <label htmlFor="dPriority">Priority</label>
+            <label htmlFor="dPriority">{t('list.priority')}</label>
             <select
               id="dPriority"
               value={priority}
               onChange={(e) => setPriority(e.target.value)}
               disabled={isUnassignedMember}
             >
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
+              <option value="low">{t('priority.low')}</option>
+              <option value="medium">{t('priority.medium')}</option>
+              <option value="high">{t('priority.high')}</option>
             </select>
           </div>
 
           <div className={styles.field}>
-            <label htmlFor="dDueDate">Due date</label>
+            <label htmlFor="dDueDate">{t('modal.dueDate')}</label>
             <input
               id="dDueDate"
               type="date"
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
               disabled={!canReschedule}
-              title={canReschedule ? undefined : 'Only assigned members can reschedule this task'}
+              title={canReschedule ? undefined : t('detail.lockReschedule')}
             />
             {countdown && (
               <p
@@ -364,14 +453,14 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
             )}
             {!canReschedule && (
               <p className={styles.emptyText} style={{ marginTop: 4 }}>
-                You're not assigned to this task, so you can't reschedule it.
+                {t('detail.cantReschedule')}
               </p>
             )}
           </div>
 
           {dueDate && (
             <div className={styles.field}>
-              <label htmlFor="dDueTime">Due time</label>
+              <label htmlFor="dDueTime">{t('modal.dueTime')}</label>
               <input
                 id="dDueTime"
                 type="time"
@@ -385,13 +474,13 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
 
           {dueDate && (
             <div className={styles.field}>
-              <label htmlFor="dReminder">Remind me</label>
+              <label htmlFor="dReminder">{t('modal.remindMe')}</label>
               <select
                 id="dReminder"
                 value={reminderHours}
                 onChange={(e) => setReminderHours(Number(e.target.value))}
                 disabled={!canReschedule}
-                title={canReschedule ? undefined : 'Only assigned members can change the reminder time'}
+                title={canReschedule ? undefined : t('detail.lockReminder')}
               >
                 {REMINDER_PRESETS.map((opt) => (
                   <option key={opt.hours} value={opt.hours}>
@@ -404,27 +493,38 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
 
           <div className={styles.field}>
             <label>
-              Assign to{assigneeIds.length > 0 && ` (${assigneeIds.length} selected)`}
+              {t('modal.assignTo')}
+              {assigneeIds.length > 0 && ` (${t('board.selected', { n: assigneeIds.length })})`}
             </label>
             <div className={styles.assigneeList}>
-              {users.length === 0 && <p className={styles.emptyText}>No users available.</p>}
+              {users.length === 0 && <p className={styles.emptyText}>{t('modal.noUsers')}</p>}
               {users.map((u) => (
-                <label key={u.id} className={styles.assigneeRow}>
+                <label
+                  key={u.id}
+                  className={styles.assigneeRow}
+                  title={assigneeLockReason(u) || undefined}
+                  style={assigneeLockReason(u) ? { opacity: 0.6 } : undefined}
+                >
                   <input
                     type="checkbox"
                     checked={assigneeIds.includes(u.id)}
                     onChange={() => toggleAssignee(u.id)}
-                    disabled={isUnassignedMember}
+                    disabled={Boolean(assigneeLockReason(u))}
                   />
                   <span className={styles.assigneeName}>
-                    {u.name} <span className={styles.assigneeRole}>({u.role})</span>
+                    {u.name} <span className={styles.assigneeRole}>({t(`roles.${u.role}`)})</span>
                   </span>
                 </label>
               ))}
             </div>
             {isUnassignedMember && (
               <p className={styles.emptyText} style={{ marginTop: 4 }}>
-                A PM/admin has to assign you to this task before you can assign it to yourself or others.
+                {t('detail.assignFirst')}
+              </p>
+            )}
+            {isMemberRole && !isUnassignedMember && (
+              <p className={styles.emptyText} style={{ marginTop: 4 }}>
+                {t('detail.memberHint')}
               </p>
             )}
           </div>
@@ -433,8 +533,8 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
         {task.status === 'review' && (
           <p className={styles.emptyText} style={{ margin: '0 0 12px' }}>
             {canApprove
-              ? 'This task is awaiting your approval.'
-              : 'This task is in Review, waiting for a PM to approve it before it can move to Done.'}
+              ? t('detail.awaitingYou')
+              : t('detail.inReview')}
           </p>
         )}
 
@@ -443,12 +543,12 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
         <div className={styles.formActions}>
           {canDelete && (
             <button className={styles.btnDanger} onClick={handleDelete}>
-              Delete
+              {t('common.delete')}
             </button>
           )}
           {task.status === 'done' && canApprove && (
             <button className={styles.btnDanger} onClick={() => onDeny(task.id)}>
-              Reopen — back to To Do
+              {t('detail.reopenBtn')}
             </button>
           )}
           {task.status === 'review' && canApprove && (
@@ -457,51 +557,60 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
                 className={styles.btnDanger}
                 onClick={() => onDeny(task.id)}
               >
-                Deny — back to To Do
+                {t('detail.denyBtn')}
               </button>
               <button
                 className={styles.btnPrimary}
                 onClick={() => onApprove(task.id)}
               >
-                Approve — move to Done
+                {t('detail.approveBtn')}
               </button>
             </>
           )}
           {!isUnassignedMember && (
             <button className={styles.btnPrimary} onClick={handleSave} disabled={saving}>
-              {saving ? 'Saving…' : 'Save changes'}
+              {saving ? t('modal.saving') : t('detail.saveChanges')}
             </button>
           )}
         </div>
 
         <div className={styles.section}>
-          <p className={styles.sectionTitle}>Comments</p>
+          <p className={styles.sectionTitle}>{t('detail.comments')}</p>
 
           {loadingComments ? (
-            <p className={styles.emptyText}>Loading…</p>
+            <p className={styles.emptyText}>{t('common.loading')}</p>
           ) : comments.length === 0 ? (
-            <p className={styles.emptyText}>No comments yet.</p>
+            <p className={styles.emptyText}>{t('detail.noComments')}</p>
           ) : (
             <div className={styles.commentList}>
               {comments.map((c) => (
                 <div key={c.id} className={styles.commentItem}>
                   <div className={styles.commentMeta}>
-                    <span>{c.author_name}</span>
+                    <span>
+                      {c.author_name}
+                      <span className={styles.stamp} title={new Date(c.created_at).toLocaleString(getLocale())}>
+                        {formatDateTime(c.created_at)} · {timeAgo(c.created_at)}
+                      </span>
+                      {c.updated_at && (
+                        <span className={styles.editedStamp} title={new Date(c.updated_at).toLocaleString(getLocale())}>
+                          {t('detail.editedBy', { date: formatDateTime(c.updated_at), name: c.author_name })}
+                        </span>
+                      )}
+                    </span>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      {timeAgo(c.created_at)}
                       {c.user_id === currentUser.id && editingCommentId !== c.id && (
                         <>
                           <button
                             onClick={() => startEditingComment(c)}
                             style={{ background: 'none', border: 'none', color: 'var(--color-accent)', cursor: 'pointer', fontSize: 12, padding: 0 }}
                           >
-                            Edit
+                            {t('common.edit')}
                           </button>
                           <button
                             onClick={() => handleDeleteComment(c.id)}
                             style={{ background: 'none', border: 'none', color: 'var(--priority-high)', cursor: 'pointer', fontSize: 12, padding: 0 }}
                           >
-                            Delete
+                            {t('common.delete')}
                           </button>
                         </>
                       )}
@@ -516,10 +625,10 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
                         autoFocus
                       />
                       <button className={styles.btnPrimary} onClick={() => handleSaveCommentEdit(c.id)}>
-                        Save
+                        {t('common.save')}
                       </button>
                       <button className={styles.btnGhost} onClick={() => setEditingCommentId(null)}>
-                        Cancel
+                        {t('common.cancel')}
                       </button>
                     </div>
                   ) : (
@@ -532,27 +641,27 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
 
           {isUnassignedMember ? (
             <p className={styles.emptyText} style={{ marginTop: 8 }}>
-              You're not assigned to this task, so you can't comment on it.
+              {t('detail.cantComment')}
             </p>
           ) : (
             <form className={styles.commentForm} onSubmit={handleAddComment}>
               <input
-                placeholder="Write a comment…"
+                placeholder={t('detail.commentPlaceholder')}
                 value={commentDraft}
                 onChange={(e) => setCommentDraft(e.target.value)}
               />
               <button type="submit" className={styles.btnPrimary}>
-                Post
+                {t('detail.post')}
               </button>
             </form>
           )}
         </div>
 
         <div className={styles.section}>
-          <p className={styles.sectionTitle}>Attachments</p>
+          <p className={styles.sectionTitle}>{t('detail.attachments')}</p>
 
           {attachments.length === 0 ? (
-            <p className={styles.emptyText}>No files attached.</p>
+            <p className={styles.emptyText}>{t('detail.noFiles')}</p>
           ) : (
             <div className={styles.attachmentList}>
               {attachments.map((a) => {
@@ -562,21 +671,36 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
                     <button
                       className={styles.attachmentName}
                       onClick={() => handleOpenAttachment(a)}
-                      title={previewable ? 'Click to preview' : 'Click to download'}
+                      disabled={!canOpenFiles}
+                      style={canOpenFiles ? undefined : { cursor: 'not-allowed', opacity: 0.7, textDecoration: 'none' }}
+                      title={
+                        !canOpenFiles
+                          ? t('detail.fileLocked')
+                          : previewable
+                            ? t('detail.clickPreview')
+                            : t('detail.clickDownload')
+                      }
                     >
-                      {previewable && <span aria-hidden="true">🖼 </span>}
+                      {!canOpenFiles ? (
+                        <span aria-hidden="true">🔒 </span>
+                      ) : (
+                        previewable && <span aria-hidden="true">🖼 </span>
+                      )}
                       {a.file_name}
                     </button>
+                    <span className={styles.attachStamp} title={new Date(a.created_at).toLocaleString(getLocale())}>
+                      {a.uploader_name ? t('detail.addedBy', { name: a.uploader_name }) : t('detail.added')} · {formatDateTime(a.created_at)}
+                    </span>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <span style={{ color: 'var(--color-text-muted)' }}>
                         {(a.file_size / 1024).toFixed(0)} KB
                       </span>
-                      {previewable && (
+                      {previewable && canOpenFiles && (
                         <button
                           onClick={() => handleDownload(a)}
                           style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: 12, padding: 0 }}
                         >
-                          Download
+                          {t('detail.download')}
                         </button>
                       )}
                       {canDeleteAttachment(a) && (
@@ -584,7 +708,7 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
                           onClick={() => handleDeleteAttachment(a)}
                           style={{ background: 'none', border: 'none', color: 'var(--priority-high)', cursor: 'pointer', fontSize: 12, padding: 0 }}
                         >
-                          Delete
+                          {t('common.delete')}
                         </button>
                       )}
                     </span>
@@ -593,11 +717,11 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
               })}
             </div>
           )}
-          {previewLoading && <p className={styles.emptyText}>Loading preview…</p>}
+          {previewLoading && <p className={styles.emptyText}>{t('detail.loadingPreview')}</p>}
 
           {isUnassignedMember ? (
             <p className={styles.emptyText} style={{ marginTop: 8 }}>
-              You're not assigned to this task, so you can't upload files to it.
+              {t('detail.cantFiles')}
             </p>
           ) : (
             <>
@@ -618,7 +742,7 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
                       {pendingFile.size >= 1024 * 1024
                         ? `${(pendingFile.size / (1024 * 1024)).toFixed(1)} MB`
                         : `${Math.max(1, Math.round(pendingFile.size / 1024))} KB`}
-                      {uploading ? ' · Uploading…' : ' · Not saved yet'}
+                      {uploading ? ` · ${t('detail.uploading')}` : ` · ${t('detail.notSaved')}`}
                     </span>
                   </div>
                   <button
@@ -627,7 +751,7 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
                     onClick={handleCancelUpload}
                     disabled={uploading}
                   >
-                    Cancel
+                    {t('common.cancel')}
                   </button>
                   <button
                     type="button"
@@ -635,11 +759,31 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
                     onClick={handleSaveUpload}
                     disabled={uploading}
                   >
-                    {uploading ? 'Saving…' : 'Save'}
+                    {uploading ? t('modal.saving') : t('common.save')}
                   </button>
                 </div>
               )}
             </>
+          )}
+        </div>
+
+        <div className={styles.section}>
+          <p className={styles.sectionTitle}>{t('detail.activity')}</p>
+          {activity.length === 0 ? (
+            <p className={styles.emptyText}>{t('detail.noActivity')}</p>
+          ) : (
+            <ul className={styles.activityList}>
+              {activity.map((a) => (
+                <li key={a.id} className={styles.activityItem}>
+                  <span className={styles.activityWhen}>{formatDateTime(a.created_at)}</span>
+                  <span className={styles.activityText}>
+                    <strong>{a.user_name || t('detail.someone')}</strong>{' '}
+                    {t(`activity.${a.action}`) === `activity.${a.action}` ? a.action : t(`activity.${a.action}`)}
+                    {a.detail ? <span className={styles.activityDetail}>{describeActivityDetail(a.detail)}</span> : null}
+                  </span>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
       </div>
@@ -660,7 +804,7 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
                   className={styles.previewDownloadBtn}
                   onClick={() => handleDownload({ id: preview.id, file_name: preview.name })}
                 >
-                  Download
+                  {t('detail.download')}
                 </button>
                 <button
                   className={styles.closeBtn}

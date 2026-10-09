@@ -174,3 +174,15 @@
     display: none;
   }
 }
+
+/* "Waiting for approval" confirmation after sign-up */
+.pendingIcon {
+  font-size: 34px;
+  margin-bottom: 8px;
+}
+
+.pendingNote {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  margin: 0 0 22px;
+}

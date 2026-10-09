@@ -1,9 +1,11 @@
 import { createContext, useContext, useState, useCallback } from 'react';
 import * as authApi from '../api/auth';
+import { useLang } from './LanguageContext';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
+  const { setLang } = useLang();
   const [user, setUser] = useState(() => {
     const stored = localStorage.getItem('user');
     return stored ? JSON.parse(stored) : null;
@@ -14,15 +16,15 @@ export function AuthProvider({ children }) {
     localStorage.setItem('token', data.token);
     localStorage.setItem('user', JSON.stringify(data.user));
     setUser(data.user);
+    // the account's saved language wins over whatever the login page was showing
+    if (data.user.language) setLang(data.user.language, { sync: false });
     return data.user;
-  }, []);
+  }, [setLang]);
 
+  // Sign-up no longer logs you in: the account has to be approved by an admin
+  // first, so there's no token or user to store here.
   const register = useCallback(async (name, email, password, role) => {
-    const data = await authApi.register({ name, email, password, role });
-    localStorage.setItem('token', data.token);
-    localStorage.setItem('user', JSON.stringify(data.user));
-    setUser(data.user);
-    return data.user;
+    return authApi.register({ name, email, password, role });
   }, []);
 
   const logout = useCallback(() => {

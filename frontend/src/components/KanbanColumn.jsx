@@ -1,7 +1,7 @@
-import { useState } from 'react';
 import { Droppable } from '@hello-pangea/dnd';
 import TaskCard from './TaskCard';
 import { isOverdue } from '../utils/dueDate';
+import { t } from '../i18n';
 import styles from '../pages/board.module.css';
 
 const STATUS_COLORS = {
@@ -16,30 +16,21 @@ export default function KanbanColumn({
   label,
   tasks,
   onTaskClick,
-  onQuickAdd,
   selectMode,
   selectedIds,
   onToggleSelect,
   canApprove,
   onApprove,
   onDeny,
+  onMove,
   currentUser,
   now,
 }) {
-  const [draft, setDraft] = useState('');
   const overdueCount = tasks.filter((t) => isOverdue(t.due_date, t.status, now)).length;
 
   // Done is reached only through PM/admin approval of a Review task, so a
   // member can't drag into it or quick-add straight into it.
   const doneLockedForUser = status === 'done' && !canApprove;
-
-  function handleAdd(e) {
-    e.preventDefault();
-    const title = draft.trim();
-    if (!title) return;
-    onQuickAdd(status, title);
-    setDraft('');
-  }
 
   return (
     <div className={styles.column} style={{ '--column-accent': STATUS_COLORS[status] }}>
@@ -49,7 +40,7 @@ export default function KanbanColumn({
           {label}
         </div>
         <span className={styles.columnHeaderRight}>
-          {overdueCount > 0 && <span className={styles.overdueCount}>⚠ {overdueCount} overdue</span>}
+          {overdueCount > 0 && <span className={styles.overdueCount}>⚠ {t('board.overdueCount', { n: overdueCount })}</span>}
           <span className={styles.count}>{tasks.length}</span>
         </span>
       </div>
@@ -63,9 +54,7 @@ export default function KanbanColumn({
           >
             {tasks.length === 0 && !snapshot.isDraggingOver && (
               <div className={styles.emptyColumn}>
-                {status === 'review' && !canApprove
-                  ? 'No tasks awaiting approval'
-                  : 'No tasks here yet'}
+                {status === 'review' && !canApprove ? t('board.emptyReview') : t('board.emptyColumn')}
               </div>
             )}
             {tasks.map((task, index) => (
@@ -80,6 +69,7 @@ export default function KanbanColumn({
                 canApprove={canApprove}
                 onApprove={onApprove}
                 onDeny={onDeny}
+                onMove={onMove}
                 currentUser={currentUser}
                 now={now}
               />
@@ -89,16 +79,6 @@ export default function KanbanColumn({
         )}
       </Droppable>
 
-      {!doneLockedForUser && (
-        <form className={styles.quickAdd} onSubmit={handleAdd}>
-          <input
-            className={styles.quickAddInput}
-            placeholder="+ Add a task"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-          />
-        </form>
-      )}
     </div>
   );
 }

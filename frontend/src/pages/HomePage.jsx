@@ -8,11 +8,13 @@ import * as notificationsApi from '../api/notifications';
 import TaskDetailModal from '../components/TaskDetailModal';
 import NewProjectModal from '../components/NewProjectModal';
 import ConfirmDialog from '../components/ConfirmDialog';
+import { notificationMeta } from '../utils/notificationTypes';
 import { getDueCountdown, isOverdue, formatOverdueShort } from '../utils/dueDate';
+import { timeAgo } from '../utils/dateTime';
+import { t, getLocale } from '../i18n';
 import styles from './home.module.css';
+import { colorForProject } from '../utils/projectColor';
 
-const PRIORITY_LABELS = { low: 'Low', medium: 'Medium', high: 'High' };
-const STATUS_LABELS ={ todo: 'To Do', in_progress: 'In Progress', review: 'Review', done: 'Done' };
 const STATUS_COLORS = {
   todo: 'var(--status-todo)',
   in_progress: 'var(--status-in-progress)',
@@ -28,40 +30,17 @@ const PRIORITY_COLORS = {
 const DAY_MS = 24 * 60 * 60 * 1000;
 const REFRESH_MS = 2 * 60 * 1000;
 
-// Same deterministic hash-to-color used on Calendar / Dashboard / the project
-// switcher, so a project is the same color everywhere in the app.
-function colorForProject(projectId) {
-  if (!projectId) return 'var(--color-text-muted)';
-  let hash = 0;
-  for (let i = 0; i < projectId.length; i++) {
-    hash = (hash * 31 + projectId.charCodeAt(i)) >>> 0;
-  }
-  return `hsl(${hash % 360}, 60%, 55%)`;
-}
-
 function startOfDay(date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
 function greeting(now) {
   const h = now.getHours();
-  if (h < 12) return 'Good morning';
-  if (h < 18) return 'Good afternoon';
-  return 'Good evening';
-}
-
-function timeAgo(dateStr) {
-  const diffMs = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diffMs / 60000);
-  if (mins < 1) return 'just now';
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
-}
-
-function formatShortDate(dateStr) {
-  return new Date(dateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  if (h < 5) return t('home.night');
+  if (h < 12) return t('home.morning');
+  if (h < 18) return t('home.afternoon');
+  if (h < 21) return t('home.evening');
+  return t('home.night');
 }
 
 // One task line — used in the "My tasks" tabs and the approvals list.
@@ -69,21 +48,21 @@ function TaskRow({ task, now, onOpen, actions }) {
   const overdue = isOverdue(task.due_date, task.status, now);
   const countdown = getDueCountdown(task.due_date, now);
 
-  let dueEl = <span className={styles.dueMuted}>No due date</span>;
+  let dueEl = <span className={styles.dueMuted}>{t('home.noDueDate')}</span>;
   if (task.status === 'done') {
     const doneAt = task.completed_at || task.updated_at;
-    dueEl = <span className={styles.dueMuted}>Done {timeAgo(doneAt)}</span>;
+    dueEl = <span className={styles.dueMuted}>{t('home.doneAgo', { time: timeAgo(doneAt) })}</span>;
   } else if (overdue) {
     dueEl = (
       <span className={styles.overduePill} title={countdown.label}>
-        Overdue · {formatOverdueShort(task.due_date, now)}
+        {t('home.overduePill', { text: formatOverdueShort(task.due_date, now) })}
       </span>
     );
   } else if (countdown) {
     dueEl = (
       <span
         className={countdown.urgent ? styles.dueUrgent : styles.dueMuted}
-        title={new Date(task.due_date).toLocaleString()}
+        title={new Date(task.due_date).toLocaleString(getLocale())}
       >
         {countdown.label}
       </span>
@@ -99,18 +78,18 @@ function TaskRow({ task, now, onOpen, actions }) {
       <div className={styles.taskMain}>
         <p className={styles.taskTitle}>{task.title}</p>
         <p className={styles.taskMeta}>
-          <span className={styles.projectChip} title={`Project: ${task.project_name}`}>
+          <span className={styles.projectChip} title={t('home.projectTitle', { name: task.project_name })}>
             <span className={styles.projectDot} />
             {task.project_name}
           </span>
           <span
             className={styles.priorityChip}
             style={{ '--chip-color': PRIORITY_COLORS[task.priority] }}
-            title={`${PRIORITY_LABELS[task.priority] || task.priority} priority`}
+            title={t('home.priorityTitle', { label: t(`priority.${task.priority}`) })}
           >
-            ⚑ {PRIORITY_LABELS[task.priority] || task.priority}
+            ⚑ {t(`priority.${task.priority}`)}
           </span>
-          <span className={styles.statusTag}>{STATUS_LABELS[task.status]}</span>
+          <span className={styles.statusTag}>{t(`status.${task.status}`)}</span>
         </p>
       </div>
       <div className={styles.taskSide} onClick={actions ? (e) => e.stopPropagation() : undefined}>
@@ -155,7 +134,7 @@ export default function HomePage() {
       setNotifications(notifList);
       setError('');
     } catch (err) {
-      setError('Could not load your overview. Is the API running?');
+      setError(t('home.loadFail'));
     } finally {
       setLoading(false);
     }
@@ -207,7 +186,7 @@ export default function HomePage() {
       const count = open.filter((t) => t.due_date && startOfDay(new Date(t.due_date)).getTime() === day.getTime()).length;
       return {
         key: day.toISOString(),
-        label: i === 0 ? 'Today' : day.toLocaleDateString(undefined, { weekday: 'short' }),
+        label: i === 0 ? t('home.today') : day.toLocaleDateString(getLocale(), { weekday: 'short' }),
         dateNum: day.getDate(),
         count,
       };
@@ -234,10 +213,10 @@ export default function HomePage() {
   }, [tasks, projects, user.id, now]);
 
   const tabs = [
-    { key: 'overdue', label: 'Overdue', items: data.overdue, empty: 'Nothing overdue — nice work.' },
-    { key: 'upcoming', label: 'Due this week', items: data.upcoming, empty: 'Nothing due in the next 7 days.' },
-    { key: 'open', label: 'All open', items: data.allOpen, empty: 'No open tasks are assigned to you.' },
-    { key: 'done', label: 'Done this week', items: data.doneRecently, empty: "You haven't completed anything in the last 7 days." },
+    { key: 'overdue', label: t('home.tabOverdue'), items: data.overdue, empty: t('home.emptyOverdue') },
+    { key: 'upcoming', label: t('home.tabUpcoming'), items: data.upcoming, empty: t('home.emptyUpcoming') },
+    { key: 'open', label: t('home.tabOpen'), items: data.allOpen, empty: t('home.emptyOpen') },
+    { key: 'done', label: t('home.tabDone'), items: data.doneRecently, empty: t('home.emptyDone') },
   ];
   const activeKey = tab || (data.overdue.length > 0 ? 'overdue' : 'upcoming');
   const activeTab = tabs.find((t) => t.key === activeKey);
@@ -260,17 +239,16 @@ export default function HomePage() {
       setTasks((prev) => prev.map((t) => (t.id === taskId ? updated : t)));
       setSelectedTask((prev) => (prev && prev.id === taskId ? updated : prev));
     } catch (err) {
-      setError(err.response?.data?.message || 'Could not approve that task.');
+      setError(err.response?.data?.message || t('home.approveFail'));
     }
   }
 
   async function handleDeny(taskId) {
     const isReopen = tasks.find((t) => t.id === taskId)?.status === 'done';
-    const verb = isReopen ? 'reopen' : 'deny';
-    let reason = window.prompt('Comment explaining why this task is being sent back to To Do (required):', '');
+    let reason = window.prompt(t('home.promptSendBack'), '');
     if (reason === null) return;
     while (!reason.trim()) {
-      reason = window.prompt(`A comment is required to ${verb} a task. Please explain what needs to change:`, '');
+      reason = window.prompt(t(isReopen ? 'home.promptRequiredReopen' : 'home.promptRequiredDeny'), '');
       if (reason === null) return;
     }
     try {
@@ -278,7 +256,7 @@ export default function HomePage() {
       setTasks((prev) => prev.map((t) => (t.id === taskId ? updated : t)));
       setSelectedTask((prev) => (prev && prev.id === taskId ? updated : prev));
     } catch (err) {
-      setError(err.response?.data?.message || `Could not ${verb} that task.`);
+      setError(err.response?.data?.message || t(isReopen ? 'home.reopenFail' : 'home.denyFail'));
     }
   }
 
@@ -308,15 +286,15 @@ export default function HomePage() {
   }
 
   if (loading) {
-    return <div className={styles.homeScreen}>Loading your overview…</div>;
+    return <div className={styles.homeScreen}>{t('home.loading')}</div>;
   }
 
-  const firstName = (user?.name || '').split(' ')[0] || 'there';
-  const dateLine = now.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+  const firstName = (user?.name || '').split(' ')[0] || t('home.there');
+  const dateLine = now.toLocaleDateString(getLocale(), { weekday: 'long', month: 'long', day: 'numeric' });
   const summaryParts = [
-    `${data.open.length} open task${data.open.length === 1 ? '' : 's'} assigned to you`,
-    data.overdue.length > 0 ? `${data.overdue.length} overdue` : null,
-    data.dueToday.length > 0 ? `${data.dueToday.length} due today` : null,
+    t('home.openAssigned', { count: data.open.length }),
+    data.overdue.length > 0 ? t('home.overdueN', { count: data.overdue.length }) : null,
+    data.dueToday.length > 0 ? t('home.dueTodayN', { count: data.dueToday.length }) : null,
   ].filter(Boolean);
 
   return (
@@ -335,25 +313,25 @@ export default function HomePage() {
       <div className={styles.statCards}>
         <button className={`${styles.statCard} ${activeKey === 'open' ? styles.statCardActive : ''}`} onClick={() => setTab('open')}>
           <div className={styles.statValue}>{data.open.length}</div>
-          <div className={styles.statLabel}>My open tasks</div>
+          <div className={styles.statLabel}>{t('home.statOpen')}</div>
         </button>
         <button className={`${styles.statCard} ${activeKey === 'overdue' ? styles.statCardActive : ''}`} onClick={() => setTab('overdue')}>
           <div className={`${styles.statValue} ${data.overdue.length > 0 ? styles.statValueWarn : ''}`}>
             {data.overdue.length}
           </div>
-          <div className={styles.statLabel}>Overdue</div>
+          <div className={styles.statLabel}>{t('home.statOverdue')}</div>
         </button>
-        <button className={styles.statCard} onClick={() => setTab('upcoming')} title="Shows tasks due in the next 7 days">
+        <button className={styles.statCard} onClick={() => setTab('upcoming')} title={t('home.statTodayHint')}>
           <div className={styles.statValue}>{data.dueToday.length}</div>
-          <div className={styles.statLabel}>Due today</div>
+          <div className={styles.statLabel}>{t('home.statToday')}</div>
         </button>
         <button className={`${styles.statCard} ${activeKey === 'upcoming' ? styles.statCardActive : ''}`} onClick={() => setTab('upcoming')}>
           <div className={styles.statValue}>{data.upcoming.length}</div>
-          <div className={styles.statLabel}>Due this week</div>
+          <div className={styles.statLabel}>{t('home.statWeek')}</div>
         </button>
         <button className={`${styles.statCard} ${activeKey === 'done' ? styles.statCardActive : ''}`} onClick={() => setTab('done')}>
           <div className={styles.statValue}>{data.doneRecently.length}</div>
-          <div className={styles.statLabel}>Done this week</div>
+          <div className={styles.statLabel}>{t('home.statDone')}</div>
         </button>
       </div>
 
@@ -361,21 +339,21 @@ export default function HomePage() {
         <div className={styles.mainCol}>
           {canApprove && data.awaitingApproval.length > 0 && (
             <section className={`${styles.card} ${styles.approvalCard}`}>
-              <p className={styles.cardTitle}>Awaiting your approval ({data.awaitingApproval.length})</p>
+              <p className={styles.cardTitle}>{t('home.awaiting', { count: data.awaitingApproval.length })}</p>
               <div className={styles.taskList}>
-                {data.awaitingApproval.map((t) => (
+                {data.awaitingApproval.map((item) => (
                   <TaskRow
-                    key={t.id}
-                    task={t}
+                    key={item.id}
+                    task={item}
                     now={now}
                     onOpen={setSelectedTask}
                     actions={
                       <span className={styles.approvalBtns}>
-                        <button className={styles.approveBtn} onClick={() => handleApprove(t.id)}>
-                          ✓ Approve
+                        <button className={styles.approveBtn} onClick={() => handleApprove(item.id)}>
+                          {t('home.approve')}
                         </button>
-                        <button className={styles.denyBtn} onClick={() => handleDeny(t.id)}>
-                          ✕ Deny
+                        <button className={styles.denyBtn} onClick={() => handleDeny(item.id)}>
+                          {t('home.deny')}
                         </button>
                       </span>
                     }
@@ -386,7 +364,7 @@ export default function HomePage() {
           )}
 
           <section className={styles.card}>
-            <p className={styles.cardTitle}>My tasks</p>
+            <p className={styles.cardTitle}>{t('home.myTasks')}</p>
             <div className={styles.tabs}>
               {tabs.map((t) => (
                 <button
@@ -412,7 +390,7 @@ export default function HomePage() {
           </section>
 
           <section className={styles.card}>
-            <p className={styles.cardTitle}>Next 7 days</p>
+            <p className={styles.cardTitle}>{t('home.next7')}</p>
             <div className={styles.strip}>
               {data.strip.map((d, i) => (
                 <div key={d.key} className={`${styles.stripDay} ${i === 0 ? styles.stripToday : ''}`}>
@@ -422,7 +400,7 @@ export default function HomePage() {
                 </div>
               ))}
             </div>
-            <p className={styles.stripHint}>Tasks assigned to you, by due date.</p>
+            <p className={styles.stripHint}>{t('home.stripHint')}</p>
           </section>
         </div>
 
@@ -430,17 +408,18 @@ export default function HomePage() {
           <section className={styles.card}>
             <div className={styles.cardHeadRow}>
               <p className={`${styles.cardTitle} ${styles.cardTitleInline}`}>
-                Projects <span className={styles.cardHint}>· color = project</span>
+                {t('home.projects')} <span className={styles.cardHint}>{t('home.colorHint')}</span>
               </p>
               {canApprove && (
                 <button type="button" className={styles.newProjectBtn} onClick={() => setShowNewProject(true)}>
-                  + New project
+                  {t('home.newProject')}
                 </button>
               )}
             </div>
             {data.projectStats.length === 0 ? (
               <p className={styles.emptyText}>
-                No projects yet.{canApprove ? ' Click “+ New project” to create one.' : ''}
+                {t('home.noProjects')}
+                {canApprove ? t('home.noProjectsHint') : ''}
               </p>
             ) : (
               <div className={styles.projectList}>
@@ -448,12 +427,12 @@ export default function HomePage() {
                   const pct = total === 0 ? 0 : Math.round((done / total) * 100);
                   const color = colorForProject(project.id);
                   return (
-                    <div key={project.id} className={styles.projectItemWrap}>
+                    <div key={project.id} className={`${styles.projectItemWrap} ${canApprove ? styles.hasDelete : ''}`}>
                       <button
                         type="button"
                         className={styles.projectItem}
                         onClick={() => openProject(project.id)}
-                        title="Open this project's board"
+                        title={t('home.openBoardTitle')}
                       >
                         <div className={styles.projectTop}>
                           <span className={styles.projectDotLg} style={{ background: color }} />
@@ -466,20 +445,20 @@ export default function HomePage() {
                           <div className={styles.progressFill} style={{ width: `${pct}%`, background: color }} />
                         </div>
                         <p className={styles.projectMeta}>
-                          <span>{done}/{total} done</span>
-                          {mineOpen > 0 && <span>{mineOpen} assigned to you</span>}
-                          {overdue > 0 && <span className={styles.projectOverdue}>{overdue} overdue</span>}
+                          <span>{t('home.doneOf', { done, total })}</span>
+                          {mineOpen > 0 && <span>{t('home.assignedToYou', { n: mineOpen })}</span>}
+                          {overdue > 0 && <span className={styles.projectOverdue}>{t('home.projectOverdue', { n: overdue })}</span>}
                         </p>
                       </button>
                       {canApprove && (
                         <button
                           type="button"
                           className={styles.projectDeleteBtn}
-                          title={`Delete "${project.name}"`}
-                          aria-label={`Delete "${project.name}"`}
+                          title={t('home.deleteProjectTitle', { name: project.name })}
+                          aria-label={t('home.deleteProjectTitle', { name: project.name })}
                           onClick={() => setDeleteTarget({ project, total })}
                         >
-                          🗑
+                          <span aria-hidden="true">🗑</span> {t('home.deleteBtn')}
                         </button>
                       )}
                     </div>
@@ -490,18 +469,22 @@ export default function HomePage() {
           </section>
 
           <section className={styles.card}>
-            <p className={styles.cardTitle}>Recent updates</p>
+            <p className={styles.cardTitle}>{t('home.recent')}</p>
             {notifications.length === 0 ? (
-              <p className={styles.emptyText}>You're all caught up.</p>
+              <p className={styles.emptyText}>{t('home.caughtUp')}</p>
             ) : (
               <div className={styles.notifList}>
                 {notifications.slice(0, 6).map((n) => (
                   <button
                     key={n.id}
                     className={`${styles.notifItem} ${!n.is_read ? styles.notifUnread : ''}`}
+                    style={{ '--n-color': notificationMeta(n.type).color }}
                     onClick={() => handleNotificationClick(n)}
                   >
-                    <p className={styles.notifMessage}>{n.message}</p>
+                    <p className={styles.notifMessage}>
+                      <span className={styles.notifTag}>{notificationMeta(n.type).label}</span>
+                      {n.message}
+                    </p>
                     <span className={styles.notifTime}>{timeAgo(n.created_at)}</span>
                   </button>
                 ))}
@@ -528,15 +511,18 @@ export default function HomePage() {
         <NewProjectModal onClose={() => setShowNewProject(false)} onCreate={handleCreateProject} />
       )}
 
+      {/* an empty project needs one click; one with tasks needs the word "delete" */}
       {deleteTarget && (
         <ConfirmDialog
-          title="Delete project"
-          message={`This permanently deletes "${deleteTarget.project.name}" and all ${deleteTarget.total} task${
-            deleteTarget.total === 1 ? '' : 's'
-          } in it. This cannot be undone.`}
-          confirmLabel="Delete project"
+          title={t('home.deleteTitle')}
+          message={
+            deleteTarget.total === 0
+              ? t('home.deleteEmpty', { name: deleteTarget.project.name })
+              : t('home.deleteWithTasks', { name: deleteTarget.project.name, count: deleteTarget.total })
+          }
+          confirmLabel={t('common.delete')}
           danger
-          requireText={deleteTarget.project.name}
+          requireText={deleteTarget.total === 0 ? undefined : t('home.deleteWord')}
           onConfirm={() => handleDeleteProject(deleteTarget.project.id)}
           onClose={() => setDeleteTarget(null)}
         />

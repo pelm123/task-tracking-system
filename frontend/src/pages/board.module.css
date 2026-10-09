@@ -346,6 +346,49 @@
   color: var(--priority-high);
 }
 
+.acceptBtn,
+.submitBtn {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 7px 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: opacity 0.12s ease, background 0.12s ease;
+}
+
+.acceptBtn {
+  border: 1px solid var(--status-in-progress);
+  background: color-mix(in srgb, var(--status-in-progress) 16%, transparent);
+  color: var(--status-in-progress);
+}
+
+.submitBtn {
+  border: 1px solid var(--status-review);
+  background: color-mix(in srgb, var(--status-review) 16%, transparent);
+  color: var(--status-review);
+}
+
+.backBtn {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-muted);
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+
+.backBtn:hover {
+  color: var(--color-text);
+  border-color: var(--color-text-muted);
+}
+
+.acceptBtn:hover,
+.submitBtn:hover,
 .approveBtn:hover,
 .denyBtn:hover {
   opacity: 0.8;
@@ -372,4 +415,68 @@
   border-style: solid;
   border-color: var(--color-accent);
   background: var(--color-surface);
+}
+
+/* Absolute due date line on a card (the countdown/overdue badge sits above it) */
+.dueDateLine {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.dueDateLineOverdue {
+  color: var(--priority-high);
+  font-weight: 600;
+}
+
+/* Header "New task" button — the one way to create a task */
+.newTaskBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 18px 9px 12px;
+  background: var(--color-accent);
+  border: 1px solid var(--color-accent);
+  border-radius: 999px;
+  color: #1a1a1a;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--color-accent) 35%, transparent);
+  transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
+}
+
+.newTaskPlus {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.18);
+  font-size: 17px;
+  line-height: 1;
+  font-weight: 600;
+  transition: transform 0.18s ease;
+}
+
+.newTaskBtn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.06);
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--color-accent) 45%, transparent);
+}
+
+.newTaskBtn:hover .newTaskPlus {
+  transform: rotate(90deg);
+}
+
+.newTaskBtn:active {
+  transform: translateY(0);
+  filter: brightness(0.96);
+}
+
+.newTaskBtn:focus-visible {
+  outline: 2px solid var(--color-text);
+  outline-offset: 2px;
 }

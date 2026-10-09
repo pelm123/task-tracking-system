@@ -1,9 +1,10 @@
 const pool = require('../config/db');
-const { notifyLineIfLinked } = require('../config/line');
+const { logActivity } = require('../config/activity');
+const { notify, notifyMany, getUserLanguage } = require('../config/notify');
+const { describeChange, forLang } = require('../config/i18n');
 
 const VALID_STATUSES = ['todo', 'in_progress', 'review', 'done'];
 const VALID_PRIORITIES = ['low', 'medium', 'high'];
-const STATUS_LABELS = { todo: 'To Do', in_progress: 'In Progress', review: 'Review', done: 'Done' };
 const MIN_REMINDER_HOURS = 1;
 const MAX_REMINDER_HOURS = 24 * 30; // 30 days — generous ceiling, not a real limit
 
@@ -36,20 +37,6 @@ async function getUserName(userId) {
   return result.rows[0]?.name || null;
 }
 
-function formatDueDate(dueDate) {
-  if (!dueDate) return 'no due date';
-  // Pin to Bangkok time — without an explicit timeZone this renders in the
-  // SERVER's local time (often UTC), which made a 6:00 PM due date show up
-  // in notifications as 11:00 AM. See dueDateCheck.js for the same fix.
-  return new Date(dueDate).toLocaleString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    timeZone: 'Asia/Bangkok',
-  });
-}
-
 // true if n is a finite integer within [MIN_REMINDER_HOURS, MAX_REMINDER_HOURS]
 function isValidReminderHours(n) {
   return Number.isInteger(n) && n >= MIN_REMINDER_HOURS && n <= MAX_REMINDER_HOURS;
@@ -76,21 +63,26 @@ async function getEnrichedTask(id) {
 // task must already be the ENRICHED version (has project_name, priority, due_date).
 async function notifyAssignees(task, userIds, actorId) {
   const actorName = await getUserName(actorId);
-  const priorityLabel = task.priority.charAt(0).toUpperCase() + task.priority.slice(1);
-  const message = `${actorName} assigned you to "${task.title}" (${priorityLabel} priority, due ${formatDueDate(task.due_date)}) in ${task.project_name}`;
 
   for (const userId of userIds) {
     if (!userId || userId === actorId) continue; // don't notify yourself
     try {
-      await pool.query(
-        `INSERT INTO notifications (user_id, task_id, type, message)
-         VALUES ($1, $2, 'assigned', $3)`,
-        [userId, task.id, message]
-      );
+      await notify(userId, {
+        taskId: task.id,
+        type: 'assigned',
+        emoji: '📋',
+        build: (L) =>
+          L.tr('n.assigned', {
+            actor: actorName || L.tr('someone'),
+            title: task.title,
+            priority: L.priority(task.priority),
+            due: L.due(task.due_date),
+            project: task.project_name,
+          }),
+      });
     } catch (err) {
       console.error('notifyAssignees error:', err.message);
     }
-    notifyLineIfLinked(userId, `📋 ${message}`, 'assigned');
   }
 }
 
@@ -175,12 +167,20 @@ async function getTask(req, res) {
   }
 }
 
+// Keep in sync with tasks.title VARCHAR(500) and the forms' maxLength.
+const MAX_TITLE_LENGTH = 500;
+
 // POST /tasks
 async function createTask(req, res) {
   const { title, description, priority, due_date, reminder_hours_before, assignee_ids, project_id } = req.body;
 
   if (!title) {
     return res.status(400).json({ message: 'title is required' });
+  }
+  if (title.length > MAX_TITLE_LENGTH) {
+    return res.status(400).json({
+      message: `Title is too long (${title.length} characters). The limit is ${MAX_TITLE_LENGTH}.`,
+    });
   }
   if (!project_id) {
     return res.status(400).json({ message: 'project_id is required' });
@@ -205,6 +205,7 @@ async function createTask(req, res) {
     const taskId = result.rows[0].id;
     const newlyAssigned = await setTaskAssignees(taskId, assignee_ids);
     const task = await getEnrichedTask(taskId);
+    await logActivity(taskId, req.user.id, 'created', null);
     await notifyAssignees(task, newlyAssigned, req.user.id);
     broadcastTask(req, task.project_id, 'task:upserted', task);
 
@@ -242,10 +243,46 @@ function sameIdSet(a, b) {
   return true;
 }
 
+// Rules for a plain "member" changing who is on a task (admin/pm are never
+// restricted). A member who's on the task can bring in teammates to help, but:
+//   - they can only ADD other members (not PMs or admins), and
+//   - they can never REMOVE anyone — only a PM/admin can take people off.
+// Returns an error message string if the change breaks a rule, else null.
+async function checkMemberAssigneeChange(taskId, newIds) {
+  const currentRows = await pool.query('SELECT user_id FROM task_assignees WHERE task_id = $1', [taskId]);
+  const currentIds = new Set(currentRows.rows.map((r) => r.user_id));
+  const wanted = new Set((newIds || []).filter(Boolean));
+
+  for (const id of currentIds) {
+    if (!wanted.has(id)) {
+      return 'Only a PM or admin can remove someone from a task.';
+    }
+  }
+
+  const added = [...wanted].filter((id) => !currentIds.has(id));
+  if (added.length > 0) {
+    const roles = await pool.query(
+      'SELECT id, role FROM users WHERE id = ANY($1::uuid[]) AND is_approved = TRUE',
+      [added]
+    );
+    const allMembers =
+      roles.rows.length === added.length && roles.rows.every((r) => r.role === 'member');
+    if (!allMembers) {
+      return 'You can only add team members to help with a task.';
+    }
+  }
+  return null;
+}
+
 // PATCH /tasks/:id  (general edit: title, description, priority, due_date, assignee_ids)
 async function updateTask(req, res) {
   const { title, description, priority, due_date, reminder_hours_before, assignee_ids } = req.body;
 
+  if (title !== undefined && title !== null && title.length > MAX_TITLE_LENGTH) {
+    return res.status(400).json({
+      message: `Title is too long (${title.length} characters). The limit is ${MAX_TITLE_LENGTH}.`,
+    });
+  }
   if (priority && !VALID_PRIORITIES.includes(priority)) {
     return res.status(400).json({ message: `priority must be one of ${VALID_PRIORITIES.join(', ')}` });
   }
@@ -311,6 +348,12 @@ async function updateTask(req, res) {
             });
           }
         }
+      } else if (assignee_ids !== undefined) {
+        // On the task (or its creator): may add fellow members, never remove anyone
+        const problem = await checkMemberAssigneeChange(req.params.id, assignee_ids);
+        if (problem) {
+          return res.status(403).json({ message: problem });
+        }
       }
     }
 
@@ -321,19 +364,25 @@ async function updateTask(req, res) {
     // notification for anyone newly added.
     const changedFields = [];
     if (title !== undefined && title !== existing.title) {
-      changedFields.push(`title → "${title}"`);
+      changedFields.push({ k: 'title', v: title });
     }
     if (description !== undefined && description !== (existing.description || '')) {
-      changedFields.push('description updated');
+      changedFields.push({ k: 'description' });
     }
     if (priority !== undefined && priority !== existing.priority) {
-      changedFields.push(`priority → ${priority}`);
+      changedFields.push({ k: 'priority', v: priority });
     }
     if (due_date !== undefined && !sameDueDate(due_date, existing.due_date)) {
-      changedFields.push(`due date → ${formatDueDate(due_date)}`);
+      changedFields.push({ k: 'due', v: new Date(due_date).toISOString() });
     }
     if (reminder_hours_before !== undefined && reminder_hours_before !== existing.reminder_hours_before) {
-      changedFields.push('reminder time updated');
+      changedFields.push({ k: 'reminder' });
+    }
+
+    let assigneesBefore = null;
+    if (assignee_ids !== undefined) {
+      const cur = await pool.query('SELECT user_id FROM task_assignees WHERE task_id = $1', [req.params.id]);
+      assigneesBefore = cur.rows.map((r) => r.user_id);
     }
 
     await pool.query(
@@ -357,6 +406,15 @@ async function updateTask(req, res) {
 
     const task = await getEnrichedTask(req.params.id);
 
+    const activityParts = [...changedFields];
+    if (assigneesBefore && !sameIdSet(assigneesBefore, assignee_ids)) {
+      activityParts.push({ k: 'assignees', v: task.assignees.map((a) => a.name) });
+    }
+    if (activityParts.length > 0) {
+      // stored language-neutral; the task popup renders it in the viewer's language
+      await logActivity(task.id, req.user.id, 'edited', JSON.stringify({ changes: activityParts }));
+    }
+
     if (newlyAssigned.length > 0) {
       await notifyAssignees(task, newlyAssigned, req.user.id);
     }
@@ -368,16 +426,20 @@ async function updateTask(req, res) {
     // avoid a duplicate ping for the same save.
     if (changedFields.length > 0) {
       const actorName = await getUserName(req.user.id);
-      const message = `${actorName} updated "${task.title}" (${changedFields.join(', ')})`;
       const newlyAssignedSet = new Set(newlyAssigned);
-      for (const assignee of task.assignees) {
-        if (assignee.id === req.user.id || newlyAssignedSet.has(assignee.id)) continue;
-        await pool.query(
-          `INSERT INTO notifications (user_id, task_id, type, message)
-           VALUES ($1, $2, 'task_updated', $3)`,
-          [assignee.id, task.id, message]
-        );
-      }
+      const recipients = task.assignees
+        .map((a) => a.id)
+        .filter((id) => id !== req.user.id && !newlyAssignedSet.has(id));
+      await notifyMany(recipients, {
+        taskId: task.id,
+        type: 'task_updated', // no emoji → in-app only, never LINE
+        build: (L) =>
+          L.tr('n.updated', {
+            actor: actorName || L.tr('someone'),
+            title: task.title,
+            changes: changedFields.map((c) => describeChange(L, c)).join(', '),
+          }),
+      });
     }
 
     broadcastTask(req, task.project_id, 'task:upserted', task);
@@ -431,6 +493,17 @@ async function updateTaskStatus(req, res) {
       if (assignedCheck.rows.length === 0) {
         return res.status(403).json({ message: 'You can only move tasks you are assigned to.' });
       }
+      // Members move a task forward with the two buttons only: Accept
+      // (To Do → In Progress) and Submit for review (In Progress → Review).
+      const allowed =
+        (previousStatus === 'todo' && status === 'in_progress') ||
+        (previousStatus === 'in_progress' && status === 'review') ||
+        (previousStatus === 'in_progress' && status === 'todo'); // changed their mind
+      if (!allowed) {
+        return res.status(403).json({
+          message: 'Members can accept a To Do task, or move an In Progress task back to To Do or on to Review.',
+        });
+      }
     }
 
     // Track completed_at alongside status: set it the moment a task lands
@@ -445,19 +518,25 @@ async function updateTaskStatus(req, res) {
     );
 
     const task = await getEnrichedTask(req.params.id);
+    await logActivity(task.id, req.user.id, 'status', JSON.stringify({ from: previousStatus, to: status }));
 
     if (task.assignees.length > 0) {
       const actorName = await getUserName(req.user.id);
-      const message = `${actorName} moved "${task.title}" from ${STATUS_LABELS[previousStatus]} → ${STATUS_LABELS[status]}`;
-      for (const assignee of task.assignees) {
-        if (assignee.id === req.user.id) continue; // don't notify the actor
-        await pool.query(
-          `INSERT INTO notifications (user_id, task_id, type, message)
-           VALUES ($1, $2, 'status_change', $3)`,
-          [assignee.id, task.id, message]
-        );
-        notifyLineIfLinked(assignee.id, `🔄 ${message}`, 'status_change');
-      }
+      await notifyMany(
+        task.assignees.map((a) => a.id).filter((id) => id !== req.user.id), // don't notify the actor
+        {
+          taskId: task.id,
+          type: 'status_change',
+          emoji: '🔄',
+          build: (L) =>
+            L.tr('n.moved', {
+              actor: actorName || L.tr('someone'),
+              title: task.title,
+              from: L.status(previousStatus),
+              to: L.status(status),
+            }),
+        }
+      );
     }
     broadcastTask(req, task.project_id, 'task:upserted', task);
 
@@ -486,18 +565,23 @@ async function approveTask(req, res) {
       [req.params.id]
     );
     const task = await getEnrichedTask(req.params.id);
+    await logActivity(task.id, req.user.id, 'approved', JSON.stringify({ from: 'review', to: 'done' }));
 
     const actorName = await getUserName(req.user.id);
-    const message = `${actorName} approved "${task.title}" — moved to Done`;
-    for (const assignee of task.assignees) {
-      if (assignee.id === req.user.id) continue; // don't notify the actor
-      await pool.query(
-        `INSERT INTO notifications (user_id, task_id, type, message)
-         VALUES ($1, $2, 'approved', $3)`,
-        [assignee.id, task.id, message]
-      );
-      notifyLineIfLinked(assignee.id, `✅ ${message}`, 'approved');
-    }
+    await notifyMany(
+      task.assignees.map((a) => a.id).filter((id) => id !== req.user.id), // don't notify the actor
+      {
+        taskId: task.id,
+        type: 'approved',
+        emoji: '✅',
+        build: (L) =>
+          L.tr('n.approved', {
+            actor: actorName || L.tr('someone'),
+            title: task.title,
+            done: L.status('done'),
+          }),
+      }
+    );
 
     broadcastTask(req, task.project_id, 'task:upserted', task);
     res.json(task);
@@ -541,28 +625,41 @@ async function denyTask(req, res) {
 
     // record the PM's reason as a real comment, so it's visible in the
     // task's comment thread, not just buried in a notification string
-    const commentPrefix = isReopen ? 'Reopened' : 'Approval denied';
+    // (written in the actor's language — a comment is stored once, not per reader)
+    const actorLang = forLang(await getUserLanguage(req.user.id));
+    const commentText = actorLang.tr(isReopen ? 'commentReopened' : 'commentDenied', { reason: trimmedReason });
     const commentResult = await pool.query(
       `INSERT INTO comments (task_id, user_id, content)
        VALUES ($1, $2, $3)
        RETURNING id, content, created_at, user_id`,
-      [req.params.id, req.user.id, `${commentPrefix} — returned to To Do: ${trimmedReason}`]
+      [req.params.id, req.user.id, commentText]
     );
 
     const task = await getEnrichedTask(req.params.id);
+    await logActivity(
+      task.id,
+      req.user.id,
+      isReopen ? 'reopened' : 'denied',
+      JSON.stringify({ from: isReopen ? 'done' : 'review', to: 'todo', reason: trimmedReason })
+    );
 
     const actorName = await getUserName(req.user.id);
-    const reasonLabel = isReopen ? 'reopened' : 'approval denied';
-    const message = `${actorName} returned "${task.title}" to To Do (${reasonLabel}) — "${trimmedReason}"`;
-    for (const assignee of task.assignees) {
-      if (assignee.id === req.user.id) continue; // don't notify the actor
-      await pool.query(
-        `INSERT INTO notifications (user_id, task_id, type, message)
-         VALUES ($1, $2, 'approval_denied', $3)`,
-        [assignee.id, task.id, message]
-      );
-      notifyLineIfLinked(assignee.id, `↩️ ${message}`, 'approval_denied');
-    }
+    await notifyMany(
+      task.assignees.map((a) => a.id).filter((id) => id !== req.user.id), // don't notify the actor
+      {
+        taskId: task.id,
+        type: 'approval_denied',
+        emoji: '↩️',
+        build: (L) =>
+          L.tr('n.denied', {
+            actor: actorName || L.tr('someone'),
+            title: task.title,
+            todo: L.status('todo'),
+            why: L.tr(isReopen ? 'n.deniedWhyReopened' : 'n.deniedWhyDenied'),
+            reason: trimmedReason,
+          }),
+      }
+    );
 
     broadcastTask(req, task.project_id, 'task:upserted', task);
     res.json({ ...task, denialComment: { ...commentResult.rows[0], author_name: actorName } });
@@ -592,6 +689,25 @@ async function deleteTask(req, res) {
     res.status(204).send();
   } catch (err) {
     console.error('Delete task error:', err.message);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+// GET /tasks/:id/activity — who changed what, and when (newest first)
+async function listTaskActivity(req, res) {
+  try {
+    const result = await pool.query(
+      `SELECT a.id, a.action, a.detail, a.created_at, a.user_id, u.name AS user_name
+       FROM task_activity a
+       LEFT JOIN users u ON u.id = a.user_id
+       WHERE a.task_id = $1
+       ORDER BY a.created_at DESC
+       LIMIT 200`,
+      [req.params.id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('List activity error:', err.message);
     res.status(500).json({ message: 'Internal server error' });
   }
 }
@@ -628,6 +744,27 @@ async function bulkUpdateStatus(req, res) {
       }
     }
 
+    // Members only get Accept (To Do → In Progress) and, from In Progress,
+    // Submit for review or back to To Do, for the whole selection.
+    if (req.user.role === 'member') {
+      const requiredFrom = { in_progress: 'todo', review: 'in_progress', todo: 'in_progress' }[status];
+      if (!requiredFrom) {
+        return res.status(403).json({ message: 'Members can only accept tasks or submit them for review.' });
+      }
+      const wrongStage = await pool.query(
+        `SELECT 1 FROM tasks WHERE id = ANY($1::uuid[]) AND status <> $2::task_status LIMIT 1`,
+        [taskIds, requiredFrom]
+      );
+      if (wrongStage.rows.length > 0) {
+        return res.status(400).json({
+          message:
+            status === 'in_progress'
+              ? 'Only To Do tasks can be accepted. Deselect the others and try again.'
+              : 'Only In Progress tasks can be sent back to To Do or submitted for review. Deselect the others and try again.',
+        });
+      }
+    }
+
     // Done tasks can't be bulk-moved out — each one has to be reopened
     // individually with a comment (POST /tasks/:id/deny).
     if (status !== 'done') {
@@ -651,6 +788,7 @@ async function bulkUpdateStatus(req, res) {
     );
     const updated = await Promise.all(result.rows.map((r) => getEnrichedTask(r.id)));
     for (const task of updated) {
+      await logActivity(task.id, req.user.id, 'status', JSON.stringify({ to: status }));
       broadcastTask(req, task.project_id, 'task:upserted', task);
     }
     res.json(updated);
@@ -672,8 +810,20 @@ async function bulkAssign(req, res) {
   }
 
   try {
-    // A member can only reassign tasks they're already assigned to.
+    // A member can only reassign tasks they're already assigned to — and can
+    // only ADD fellow members; clearing assignees is for PM/admin.
     if (req.user.role === 'member') {
+      if (!assignee_id) {
+        return res.status(403).json({ message: 'Only a PM or admin can remove assignees from a task.' });
+      }
+      const target = await pool.query(
+        "SELECT 1 FROM users WHERE id = $1 AND role = 'member' AND is_approved = TRUE",
+        [assignee_id]
+      );
+      if (target.rows.length === 0) {
+        return res.status(403).json({ message: 'You can only add team members to help with a task.' });
+      }
+
       const unowned = await pool.query(
         `SELECT t.id FROM tasks t
          WHERE t.id = ANY($1::uuid[])
@@ -762,4 +912,5 @@ module.exports = {
   bulkUpdateStatus,
   bulkAssign,
   bulkDelete,
+  listTaskActivity,
 };

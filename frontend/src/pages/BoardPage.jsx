@@ -8,24 +8,24 @@ import socket from '../api/socket';
 import { isOverdue } from '../utils/dueDate';
 import { colorForProject } from '../utils/projectColor';
 import KanbanColumn from '../components/KanbanColumn';
+import ProjectSwitcher from '../components/ProjectSwitcher';
 import NewTaskModal from '../components/NewTaskModal';
 import TaskDetailModal from '../components/TaskDetailModal';
+import TaskListView from '../components/TaskListView';
+import { t } from '../i18n';
 import styles from './board.module.css';
-import tableStyles from './admin.module.css';
 
-const STATUS_LABELS = { todo: 'To Do', in_progress: 'In Progress', review: 'Review', done: 'Done' };
+const COLUMNS = [{ status: 'todo' }, { status: 'in_progress' }, { status: 'review' }, { status: 'done' }];
 
-function formatDate(dateStr) {
-  if (!dateStr) return '—';
-  return new Date(dateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+// Insert-or-replace by id. The server broadcasts "task:upserted" to EVERYONE
+// in the project room — including the person who just created the task — and
+// that event can land before or after the create request's own response.
+// Whichever arrives second must replace the card, never add another one.
+function upsertTaskInList(list, task) {
+  return list.some((t) => t.id === task.id)
+    ? list.map((t) => (t.id === task.id ? task : t))
+    : [task, ...list];
 }
-
-const COLUMNS = [
-  { status: 'todo', label: 'To Do' },
-  { status: 'in_progress', label: 'In Progress' },
-  { status: 'review', label: 'Review' },
-  { status: 'done', label: 'Done' },
-];
 
 export default function BoardPage() {
   const { currentProjectId, currentProject } = useProject();
@@ -68,7 +68,7 @@ export default function BoardPage() {
       const data = await tasksApi.listTasks({ project_id: currentProjectId });
       setTasks(data);
     } catch (err) {
-      setError('Could not load tasks. Is the API running?');
+      setError(t('board.loadFail'));
     } finally {
       setLoading(false);
     }
@@ -88,10 +88,7 @@ export default function BoardPage() {
 
     function handleUpserted(task) {
       if (task.project_id !== currentProjectId) return;
-      setTasks((prev) => {
-        const exists = prev.some((t) => t.id === task.id);
-        return exists ? prev.map((t) => (t.id === task.id ? task : t)) : [task, ...prev];
-      });
+      setTasks((prev) => upsertTaskInList(prev, task));
       setSelectedTask((prev) => (prev && prev.id === task.id ? task : prev));
     }
 
@@ -110,24 +107,24 @@ export default function BoardPage() {
     };
   }, [currentProjectId]);
 
-  async function handleDragEnd(result) {
-    const { source, destination, draggableId } = result;
-    if (!destination) return;
-    if (source.droppableId === destination.droppableId && source.index === destination.index) return;
-
-    const newStatus = destination.droppableId;
+  // The single place that decides whether a task may change status, shared by
+  // drag-and-drop and the list view's status dropdown so both follow the same
+  // rules (and the backend enforces them again).
+  async function moveTask(taskId, newStatus) {
+    const fromStatus = tasks.find((t) => t.id === taskId)?.status;
+    if (!fromStatus || fromStatus === newStatus) return;
 
     // A Done task can only leave Done through the reopen flow: PM/admin,
     // back to To Do, with a required comment (the backend enforces this
     // too). Nothing is moved optimistically here — the card just snaps
     // back unless the reopen actually goes through.
-    if (source.droppableId === 'done' && newStatus !== 'done') {
+    if (fromStatus === 'done' && newStatus !== 'done') {
       if (!canApprove) {
-        setError('Only a PM or admin can reopen a Done task.');
+        setError(t('board.errReopenOnlyPm'));
       } else if (newStatus !== 'todo') {
-        setError('A Done task can only be reopened to To Do, with a comment explaining why.');
+        setError(t('board.errReopenToTodo'));
       } else {
-        handleDeny(draggableId);
+        handleDeny(taskId);
       }
       return;
     }
@@ -135,7 +132,7 @@ export default function BoardPage() {
     // Members can't drag a card straight into Done — a PM/admin has to
     // approve it from Review first (see handleApprove below).
     if (newStatus === 'done' && !canApprove) {
-      setError('Only a PM or admin can move a task to Done. Move it to Review for approval instead.');
+      setError(t('board.errDoneOnlyPm'));
       return;
     }
 
@@ -143,24 +140,31 @@ export default function BoardPage() {
     // disabling the drag itself (see TaskCard), but checked again here in
     // case the task's assignee list changed after the board last loaded.
     if (!canApprove) {
-      const task = tasks.find((t) => t.id === draggableId);
+      const task = tasks.find((t) => t.id === taskId);
       const isAssignee = (task?.assignees || []).some((a) => a.id === user.id);
       if (!isAssignee) {
-        setError('You can only move tasks you are assigned to.');
+        setError(t('board.errOnlyAssigned'));
         return;
       }
     }
 
     setTasks((prev) =>
-      prev.map((t) => (t.id === draggableId ? { ...t, status: newStatus } : t))
+      prev.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t))
     );
 
     try {
-      await tasksApi.updateTaskStatus(draggableId, newStatus);
+      await tasksApi.updateTaskStatus(taskId, newStatus);
     } catch (err) {
-      setError(err.response?.data?.message || 'Could not save that move — reverting.');
+      setError(err.response?.data?.message || t('board.errMoveFail'));
       loadTasks();
     }
+  }
+
+  async function handleDragEnd(result) {
+    const { source, destination, draggableId } = result;
+    if (!destination) return;
+    if (source.droppableId === destination.droppableId && source.index === destination.index) return;
+    await moveTask(draggableId, destination.droppableId);
   }
 
   async function handleApprove(taskId) {
@@ -169,7 +173,7 @@ export default function BoardPage() {
       setTasks((prev) => prev.map((t) => (t.id === taskId ? updated : t)));
       setSelectedTask((prev) => (prev && prev.id === taskId ? updated : prev));
     } catch (err) {
-      setError(err.response?.data?.message || 'Could not approve that task.');
+      setError(err.response?.data?.message || t('home.approveFail'));
     }
   }
 
@@ -178,14 +182,13 @@ export default function BoardPage() {
   // saves it as a real comment and notifies the assignees.
   async function handleDeny(taskId) {
     const isReopen = tasks.find((t) => t.id === taskId)?.status === 'done';
-    const verb = isReopen ? 'reopen' : 'deny';
 
     // keep asking until the PM provides a comment or explicitly cancels (the
     // backend enforces this too, this just avoids a round-trip)
-    let reason = window.prompt(`Comment explaining why this task is being sent back to To Do (required):`, '');
+    let reason = window.prompt(t('home.promptSendBack'), '');
     if (reason === null) return; // user cancelled the prompt
     while (!reason.trim()) {
-      reason = window.prompt(`A comment is required to ${verb} a task. Please explain what needs to change:`, '');
+      reason = window.prompt(t(isReopen ? 'home.promptRequiredReopen' : 'home.promptRequiredDeny'), '');
       if (reason === null) return;
     }
     try {
@@ -193,26 +196,13 @@ export default function BoardPage() {
       setTasks((prev) => prev.map((t) => (t.id === taskId ? updated : t)));
       setSelectedTask((prev) => (prev && prev.id === taskId ? updated : prev));
     } catch (err) {
-      setError(err.response?.data?.message || `Could not ${verb} that task.`);
-    }
-  }
-
-  async function handleQuickAdd(status, title) {
-    try {
-      const created = await tasksApi.createTask({ title, priority: 'medium', project_id: currentProjectId });
-      if (status !== 'todo') {
-        await tasksApi.updateTaskStatus(created.id, status);
-        created.status = status;
-      }
-      setTasks((prev) => [created, ...prev]);
-    } catch (err) {
-      setError('Could not create the task.');
+      setError(err.response?.data?.message || t(isReopen ? 'home.reopenFail' : 'home.denyFail'));
     }
   }
 
   async function handleCreateFromModal(payload) {
     const created = await tasksApi.createTask({ ...payload, project_id: currentProjectId });
-    setTasks((prev) => [created, ...prev]);
+    setTasks((prev) => upsertTaskInList(prev, created));
   }
 
   async function handleUpdateTask(id, payload) {
@@ -236,18 +226,26 @@ export default function BoardPage() {
   const projectOverdue = tasks.filter((t) => isOverdue(t.due_date, t.status, now)).length;
   const overdueTotal = filteredTasks.filter((t) => isOverdue(t.due_date, t.status, now)).length;
 
-  // Overdue first, most overdue (earliest due date) at the very top; every
-  // other task keeps its existing order (Array.sort is stable).
-  const sortedTasks = overdueFirst
-    ? [...filteredTasks].sort((a, b) => {
-        const aLate = isOverdue(a.due_date, a.status, now);
-        const bLate = isOverdue(b.due_date, b.status, now);
-        if (aLate && bLate) return new Date(a.due_date) - new Date(b.due_date);
-        if (aLate) return -1;
-        if (bLate) return 1;
-        return 0;
-      })
-    : filteredTasks;
+  // Default order everywhere (columns and list): priority first (high → low),
+  // then due date (earliest first, tasks without a due date last). With
+  // "Overdue first" on, overdue tasks are pulled to the top of that order.
+  const PRIORITY_RANK = { high: 0, medium: 1, low: 2 };
+  const sortedTasks = [...filteredTasks].sort((a, b) => {
+    if (overdueFirst) {
+      const aLate = isOverdue(a.due_date, a.status, now);
+      const bLate = isOverdue(b.due_date, b.status, now);
+      if (aLate !== bLate) return aLate ? -1 : 1;
+    }
+    const pr = (PRIORITY_RANK[a.priority] ?? 3) - (PRIORITY_RANK[b.priority] ?? 3);
+    if (pr !== 0) return pr;
+    if (a.due_date && b.due_date) {
+      const d = new Date(a.due_date) - new Date(b.due_date);
+      if (d !== 0) return d;
+    } else if (a.due_date || b.due_date) {
+      return a.due_date ? -1 : 1;
+    }
+    return new Date(b.created_at) - new Date(a.created_at);
+  });
 
   function toggleOverdueFirst() {
     const next = !overdueFirst;
@@ -261,6 +259,11 @@ export default function BoardPage() {
     );
   }
 
+  // list view's header checkbox: replace the selection with the given ids
+  function setSelection(ids) {
+    setSelectedIds(ids);
+  }
+
   function exitSelectMode() {
     setSelectMode(false);
     setSelectedIds([]);
@@ -272,7 +275,7 @@ export default function BoardPage() {
       setTasks((prev) => prev.map((t) => (selectedIds.includes(t.id) ? { ...t, status } : t)));
       exitSelectMode();
     } catch (err) {
-      setError('Bulk status update failed.');
+      setError(t('board.errBulkStatus'));
     }
   }
 
@@ -283,32 +286,30 @@ export default function BoardPage() {
       setTasks((prev) => prev.map((t) => byId.get(t.id) || t));
       exitSelectMode();
     } catch (err) {
-      setError('Bulk assign failed.');
+      setError(t('board.errBulkAssign'));
     }
   }
 
   async function handleBulkDelete() {
-    if (!window.confirm(`Delete ${selectedIds.length} task(s)? This cannot be undone.`)) return;
+    if (!window.confirm(t('board.bulkDeleteConfirm', { count: selectedIds.length }))) return;
     try {
       await tasksApi.bulkDelete(selectedIds);
       setTasks((prev) => prev.filter((t) => !selectedIds.includes(t.id)));
       exitSelectMode();
     } catch (err) {
-      setError(err.response?.data?.message || 'Bulk delete failed.');
+      setError(err.response?.data?.message || t('board.errBulkDelete'));
     }
   }
 
   if (loading) {
-    return <div className={styles.boardScreen}>Loading board…</div>;
+    return <div className={styles.boardScreen}>{t('board.loading')}</div>;
   }
 
   if (!currentProjectId) {
     return (
       <div className={styles.boardScreen}>
-        <h1>Board</h1>
-        <p className={styles.subLine}>
-          No project yet. Ask an Admin/PM to create one from the Home page.
-        </p>
+        <h1>{t('nav.board')}</h1>
+        <p className={styles.subLine}>{t('board.noProject')}</p>
       </div>
     );
   }
@@ -319,17 +320,20 @@ export default function BoardPage() {
         <div className={styles.titleBlock}>
           <h1 className={styles.title}>
             <span className={styles.titleDot} style={{ background: colorForProject(currentProjectId) }} />
-            {currentProject?.name || 'Board'}
+            {currentProject?.name || t('nav.board')}
           </h1>
           <p className={styles.subLine}>
-            {tasks.length} task{tasks.length === 1 ? '' : 's'}
+            {t('board.taskCount', { count: tasks.length })}
             {' · '}
-            {tasks.filter((t) => t.status === 'done').length} done
-            {projectOverdue > 0 && <span className={styles.subOverdue}> · {projectOverdue} overdue</span>}
+            {t('board.doneCount', { n: tasks.filter((x) => x.status === 'done').length })}
+            {projectOverdue > 0 && (
+              <span className={styles.subOverdue}> · {t('board.overdueCount', { n: projectOverdue })}</span>
+            )}
           </p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowNewTaskModal(true)}>
-          + New task
+        <button className={styles.newTaskBtn} onClick={() => setShowNewTaskModal(true)}>
+          <span className={styles.newTaskPlus} aria-hidden="true">+</span>
+          {t('board.newTask')}
         </button>
       </div>
 
@@ -337,14 +341,15 @@ export default function BoardPage() {
 
       <div className={styles.toolbar}>
         <div className={styles.filterBar}>
+          <ProjectSwitcher canManageProjects={canApprove} />
           <input
-            placeholder="Search tasks…"
+            placeholder={t('board.searchPlaceholder')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className={styles.searchInput}
           />
           <select value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)}>
-            <option value="">All assignees</option>
+            <option value="">{t('board.allAssignees')}</option>
             {users.map((u) => (
               <option key={u.id} value={u.id}>
                 {u.name}
@@ -352,17 +357,17 @@ export default function BoardPage() {
             ))}
           </select>
           <select value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)}>
-            <option value="">All priorities</option>
-            <option value="low">Low</option>
-            <option value="medium">Medium</option>
-            <option value="high">High</option>
+            <option value="">{t('board.allPriorities')}</option>
+            <option value="low">{t('priority.low')}</option>
+            <option value="medium">{t('priority.medium')}</option>
+            <option value="high">{t('priority.high')}</option>
           </select>
           <button
             className={`btn ${overdueFirst ? 'btn-active' : 'btn-secondary'}`}
             onClick={toggleOverdueFirst}
-            title="Show overdue tasks at the top of each column"
+            title={t('board.overdueFirstHint')}
           >
-            ⚠ Overdue first{overdueTotal > 0 ? ` (${overdueTotal})` : ''}
+            ⚠ {t('board.overdueFirst')}{overdueTotal > 0 ? ` (${overdueTotal})` : ''}
           </button>
           {(searchQuery || filterAssignee || filterPriority) && (
             <button
@@ -373,7 +378,7 @@ export default function BoardPage() {
                 setFilterPriority('');
               }}
             >
-              Clear filters
+              {t('board.clearFilters')}
             </button>
           )}
         </div>
@@ -382,18 +387,18 @@ export default function BoardPage() {
           <button
             className={`btn ${selectMode ? 'btn-active' : 'btn-secondary'}`}
             onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
-            title="Select several cards to move, assign or delete them together"
+            title={t('board.selectHint')}
           >
-            {selectMode ? 'Cancel select' : 'Select'}
+            {selectMode ? t('board.cancelSelect') : t('board.select')}
           </button>
-          <div className={styles.segmented} role="tablist" aria-label="View">
+          <div className={styles.segmented} role="tablist" aria-label={t('board.view')}>
             <button
               role="tab"
               aria-selected={view === 'board'}
               className={`${styles.segBtn} ${view === 'board' ? styles.segBtnActive : ''}`}
               onClick={() => setView('board')}
             >
-              Board
+              {t('nav.board')}
             </button>
             <button
               role="tab"
@@ -401,7 +406,7 @@ export default function BoardPage() {
               className={`${styles.segBtn} ${view === 'list' ? styles.segBtnActive : ''}`}
               onClick={() => setView('list')}
             >
-              List
+              {t('board.list')}
             </button>
           </div>
         </div>
@@ -421,74 +426,54 @@ export default function BoardPage() {
             flexWrap: 'wrap',
           }}
         >
-          <span style={{ fontSize: 13, fontWeight: 600 }}>{selectedIds.length} selected</span>
+          <span style={{ fontSize: 13, fontWeight: 600 }}>{t('board.selected', { n: selectedIds.length })}</span>
           <select onChange={(e) => e.target.value && handleBulkStatus(e.target.value)} defaultValue="">
             <option value="" disabled>
-              Move to…
+              {t('board.moveTo')}
             </option>
-            <option value="todo">To Do</option>
-            <option value="in_progress">In Progress</option>
-            <option value="review">Review</option>
-            {canApprove && <option value="done">Done</option>}
+            <option value="todo">{canApprove ? t('status.todo') : t('board.backToTodo')}</option>
+            <option value="in_progress">{canApprove ? t('status.in_progress') : t('board.acceptOpt')}</option>
+            <option value="review">{canApprove ? t('status.review') : t('board.submitOpt')}</option>
+            {canApprove && <option value="done">{t('status.done')}</option>}
           </select>
           <select
             onChange={(e) => handleBulkAssign(e.target.value === '__clear__' ? null : e.target.value)}
             defaultValue=""
           >
             <option value="" disabled>
-              Add assignee…
+              {t('board.addAssignee')}
             </option>
-            <option value="__clear__">Clear all assignees</option>
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name}
-              </option>
-            ))}
+            {canApprove && <option value="__clear__">{t('board.clearAssignees')}</option>}
+            {/* members can only bring in fellow members, and can't clear assignees */}
+            {users
+              .filter((u) => canApprove || u.role === 'member')
+              .map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name}
+                </option>
+              ))}
           </select>
           <button className="btn btn-danger" onClick={handleBulkDelete}>
-            Delete selected
+            {t('board.deleteSelected')}
           </button>
         </div>
       )}
 
       {view === 'list' ? (
-        <div className={tableStyles.tableWrap}>
-          <table className={tableStyles.table}>
-            <thead>
-              <tr>
-                <th>Title</th>
-                <th>Status</th>
-                <th>Priority</th>
-                <th>Assignee</th>
-                <th>Due date</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedTasks.map((t) => (
-                <tr key={t.id} onClick={() => setSelectedTask(t)} style={{ cursor: 'pointer' }}>
-                  <td>{t.title}</td>
-                  <td>
-                    <span className={tableStyles.badge}>{STATUS_LABELS[t.status]}</span>
-                  </td>
-                  <td className={tableStyles.muted}>{t.priority}</td>
-                  <td className={tableStyles.muted}>
-                    {t.assignees && t.assignees.length > 0
-                      ? t.assignees.map((a) => a.name).join(', ')
-                      : 'Unassigned'}
-                  </td>
-                  <td className={tableStyles.muted}>{formatDate(t.due_date)}</td>
-                </tr>
-              ))}
-              {filteredTasks.length === 0 && (
-                <tr>
-                  <td colSpan={5} className={tableStyles.muted} style={{ textAlign: 'center', padding: 24 }}>
-                    No tasks match your filters.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <TaskListView
+          tasks={sortedTasks}
+          now={now}
+          currentUser={user}
+          canApprove={canApprove}
+          selectMode={selectMode}
+          selectedIds={selectedIds}
+          onToggleSelect={toggleSelect}
+          onSelectAll={setSelection}
+          onOpen={setSelectedTask}
+          onStatusChange={moveTask}
+          onApprove={handleApprove}
+          onDeny={handleDeny}
+        />
       ) : (
         <DragDropContext onDragEnd={handleDragEnd}>
           <div className={styles.columns}>
@@ -496,16 +481,16 @@ export default function BoardPage() {
               <KanbanColumn
                 key={col.status}
                 status={col.status}
-                label={col.label}
+                label={t(`status.${col.status}`)}
                 tasks={sortedTasks.filter((t) => t.status === col.status)}
                 onTaskClick={setSelectedTask}
-                onQuickAdd={handleQuickAdd}
                 selectMode={selectMode}
                 selectedIds={selectedIds}
                 onToggleSelect={toggleSelect}
                 canApprove={canApprove}
                 onApprove={handleApprove}
                 onDeny={handleDeny}
+                onMove={moveTask}
                 currentUser={user}
                 now={now}
               />

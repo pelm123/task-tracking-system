@@ -129,7 +129,7 @@
 
 .btnPrimary {
   background: var(--color-accent);
-  color: #1c1f1e;
+  color: var(--color-on-accent);
   border: none;
   font-weight: 600;
   padding: 9px 16px;
@@ -224,6 +224,7 @@
 }
 
 .attachmentItem {
+  flex-wrap: wrap;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -323,7 +324,7 @@
   align-items: center;
   justify-content: center;
   overflow: auto;
-  background: #1c1f1e;
+  background: var(--color-bg);
   min-height: 300px;
 }
 
@@ -410,4 +411,65 @@
 .pendingSave:disabled {
   opacity: 0.55;
   cursor: default;
+}
+
+/* ---- timestamps & activity log ---- */
+.stamp {
+  margin-left: 8px;
+  font-size: 11px;
+  opacity: 0.85;
+}
+
+.editedStamp {
+  display: block;
+  font-size: 11px;
+  font-style: italic;
+  opacity: 0.8;
+}
+
+.attachStamp {
+  flex: 1 1 100%;
+  order: 3;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.activityList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.activityItem {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  line-height: 1.45;
+  padding: 6px 10px;
+  background: var(--color-surface-raised);
+  border-radius: var(--radius-sm);
+}
+
+.activityWhen {
+  flex: 0 0 auto;
+  min-width: 118px;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.activityText {
+  color: var(--color-text);
+  min-width: 0;
+}
+
+.activityDetail {
+  display: block;
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
 }

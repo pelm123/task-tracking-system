@@ -10,6 +10,7 @@
   --color-text-muted: #9aa39e;
   --color-accent: #c98a3e;
   --color-accent-soft: rgba(201, 138, 62, 0.16);
+  --color-on-accent: #1c1f1e; /* text on top of the accent color */
 
   /* Status colors — distinct hues per Kanban column, all desaturated
      to sit quietly against the dark surface */
@@ -35,6 +36,37 @@
   --radius-sm: 6px;
   --radius-md: 10px;
   --sidebar-width: 224px;
+
+  color-scheme: dark; /* native controls, scrollbars, date pickers */
+}
+
+/* Light theme — same tokens, warm paper-like surfaces. Accent and status
+   colors are a touch deeper so they stay readable on white. */
+:root[data-theme='light'] {
+  --color-bg: #ebebe9;
+  --color-surface: #f5f5f5;
+  --color-surface-raised: #eeeeec;
+  --color-border: #d6d6d2;
+  --color-text: #26282a;
+  --color-text-muted: #6a6e70;
+  --color-accent: #a8661a;
+  --color-accent-soft: rgba(168, 102, 26, 0.12);
+  --color-on-accent: #ffffff;
+
+  --status-todo: #6f7a76;
+  --status-in-progress: #b06f1f;
+  --status-review: #4f7592;
+  --status-done: #4f7d68;
+
+  --priority-low: #66736f;
+  --priority-medium: #a98a14;
+  --priority-high: #bd4f2c;
+
+  --shadow-sm: 0 1px 2px rgba(30, 30, 25, 0.08);
+  --shadow-md: 0 4px 14px rgba(30, 30, 25, 0.12);
+  --shadow-lg: 0 12px 32px rgba(30, 30, 25, 0.18);
+
+  color-scheme: light;
 }
 
 * {
@@ -132,7 +164,7 @@ select option {
 
 .btn-primary {
   background: var(--color-accent);
-  color: #1c1f1e;
+  color: var(--color-on-accent);
   box-shadow: var(--shadow-sm);
 }
 .btn-primary:hover:not(:disabled) {

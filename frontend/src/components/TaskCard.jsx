@@ -1,5 +1,6 @@
 import { Draggable } from '@hello-pangea/dnd';
-import { getDueCountdown, isOverdue, formatOverdueShort } from '../utils/dueDate';
+import { getDueCountdown, isOverdue, formatOverdueShort, formatDueDateShort } from '../utils/dueDate';
+import { t, getLocale } from '../i18n';
 import styles from '../pages/board.module.css';
 
 const PRIORITY_COLORS = {
@@ -18,6 +19,7 @@ export default function TaskCard({
   canApprove,
   onApprove,
   onDeny,
+  onMove,
   currentUser,
   now,
 }) {
@@ -32,8 +34,9 @@ export default function TaskCard({
   const isAssignee = (task.assignees || []).some((a) => a.id === currentUser?.id);
   const canMove = canApprove || isAssignee;
 
+  // Status changes use the Accept / Submit buttons, so dragging is always off.
   return (
-    <Draggable draggableId={task.id} index={index} isDragDisabled={selectMode || !canMove}>
+    <Draggable draggableId={task.id} index={index} isDragDisabled>
       {(provided, snapshot) => (
         <div
           ref={provided.innerRef}
@@ -43,11 +46,10 @@ export default function TaskCard({
           style={{
             '--card-accent': PRIORITY_COLORS[task.priority],
             ...provided.draggableProps.style,
-            cursor: canMove ? undefined : 'default',
+            cursor: 'pointer',
             opacity: !selectMode && !canMove ? 0.75 : 1,
           }}
-          title={!selectMode && !canMove ? "You're not assigned to this task, so you can't move it" : undefined}
-          onClick={() => (selectMode ? (canMove && onToggleSelect(task.id)) : onClick(task))}
+                    onClick={() => (selectMode ? (canMove && onToggleSelect(task.id)) : onClick(task))}
         >
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
             {selectMode && (
@@ -67,17 +69,17 @@ export default function TaskCard({
               className={styles.priorityTag}
               style={{
                 color: PRIORITY_COLORS[task.priority],
-                background: 'rgba(255,255,255,0.05)',
+                background: 'color-mix(in srgb, var(--color-text) 7%, transparent)',
               }}
             >
-              {task.priority}
+              {t(`priority.${task.priority}`)}
             </span>
             {overdue && (
               <span
                 className={styles.overdueBadge}
-                title={`${countdown.label} — due ${new Date(task.due_date).toLocaleString()}`}
+                title={t('board.overdueTitle', { label: countdown.label, date: new Date(task.due_date).toLocaleString(getLocale()) })}
               >
-                Overdue · {formatOverdueShort(task.due_date, now)}
+                {t('home.overduePill', { text: formatOverdueShort(task.due_date, now) })}
               </span>
             )}
             {countdown && !overdue && (
@@ -87,12 +89,20 @@ export default function TaskCard({
                   color: countdown.urgent && task.status !== 'done' ? 'var(--priority-medium)' : undefined,
                   fontWeight: countdown.urgent && task.status !== 'done' ? 600 : undefined,
                 }}
-                title={new Date(task.due_date).toLocaleString()}
+                title={new Date(task.due_date).toLocaleString(getLocale())}
               >
                 {countdown.label}
               </span>
             )}
           </div>
+          {task.due_date && (
+            <p
+              className={`${styles.dueDateLine} ${overdue ? styles.dueDateLineOverdue : ''}`}
+              title={new Date(task.due_date).toLocaleString(getLocale())}
+            >
+              📅 {formatDueDateShort(task.due_date, now)}
+            </p>
+          )}
           {task.assignees && task.assignees.length > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
               <div style={{ display: 'flex' }}>
@@ -123,14 +133,35 @@ export default function TaskCard({
               <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
                 {task.assignees.length === 1
                   ? task.assignees[0].name
-                  : `${task.assignees.length} assignees`}
+                  : t('board.assigneesN', { n: task.assignees.length })}
               </span>
+            </div>
+          )}
+          {!selectMode && canMove && task.status === 'todo' && (
+            <div className={styles.approvalActions} onClick={(e) => e.stopPropagation()}>
+              <button className={styles.acceptBtn} onClick={() => onMove(task.id, 'in_progress')}>
+                {t('board.accept')}
+              </button>
+            </div>
+          )}
+          {!selectMode && canMove && task.status === 'in_progress' && (
+            <div className={styles.approvalActions} onClick={(e) => e.stopPropagation()}>
+              <button
+                className={styles.backBtn}
+                title={t('board.backHint')}
+                onClick={() => onMove(task.id, 'todo')}
+              >
+                {t('board.back')}
+              </button>
+              <button className={styles.submitBtn} onClick={() => onMove(task.id, 'review')}>
+                {t('board.submit')}
+              </button>
             </div>
           )}
           {canApprove && task.status === 'done' && (
             <div className={styles.approvalActions} onClick={(e) => e.stopPropagation()}>
               <button className={styles.denyBtn} onClick={() => onDeny(task.id)}>
-                ↩ Reopen
+                {t('board.reopen')}
               </button>
             </div>
           )}
@@ -140,13 +171,13 @@ export default function TaskCard({
                 className={styles.approveBtn}
                 onClick={() => onApprove(task.id)}
               >
-                ✓ Approve
+                {t('home.approve')}
               </button>
               <button
                 className={styles.denyBtn}
                 onClick={() => onDeny(task.id)}
               >
-                ✕ Deny
+                {t('home.deny')}
               </button>
             </div>
           )}

@@ -592,38 +592,59 @@
   position: relative;
 }
 
+.hasDelete .projectMeta {
+  /* keep the meta text clear of the Delete button in the bottom-right corner */
+  padding-right: 88px;
+  min-height: 24px;
+  align-items: center;
+}
+
 .projectDeleteBtn {
   position: absolute;
-  right: 8px;
-  bottom: 8px;
-  width: 26px;
-  height: 26px;
-  display: flex;
+  right: 10px;
+  bottom: 9px;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  font-size: 13px;
-  line-height: 1;
-  background: transparent;
-  border: 1px solid transparent;
+  gap: 5px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--priority-high);
+  background: color-mix(in srgb, var(--priority-high) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--priority-high) 55%, transparent);
   border-radius: var(--radius-sm);
-  color: var(--color-text-muted);
   cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
 }
 
-.projectItemWrap:hover .projectDeleteBtn,
+.projectDeleteBtn:hover,
 .projectDeleteBtn:focus-visible {
-  opacity: 1;
-}
-
-.projectDeleteBtn:hover {
-  background: color-mix(in srgb, var(--priority-high) 14%, transparent);
+  background: var(--priority-high);
   border-color: var(--priority-high);
+  color: #fff;
 }
 
-@media (hover: none) {
-  .projectDeleteBtn {
-    opacity: 0.7;
-  }
+/* Notification type color-coding (color comes from --n-color on the item) */
+.notifItem {
+  border-left: 3px solid var(--n-color, transparent);
+}
+
+.notifUnread {
+  background: color-mix(in srgb, var(--n-color, var(--color-accent)) 12%, transparent);
+  border-left-color: var(--n-color, var(--color-accent));
+}
+
+.notifTag {
+  display: inline-block;
+  margin-right: 7px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--n-color) 20%, transparent);
+  color: var(--n-color);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  vertical-align: 1px;
 }
