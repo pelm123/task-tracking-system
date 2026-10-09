@@ -204,19 +204,6 @@ export default function BoardPage() {
     }
   }
 
-  async function handleQuickAdd(status, title) {
-    try {
-      const created = await tasksApi.createTask({ title, priority: 'medium', project_id: currentProjectId });
-      if (status !== 'todo') {
-        await tasksApi.updateTaskStatus(created.id, status);
-        created.status = status;
-      }
-      setTasks((prev) => upsertTaskInList(prev, created));
-    } catch (err) {
-      setError('Could not create the task.');
-    }
-  }
-
   async function handleCreateFromModal(payload) {
     const created = await tasksApi.createTask({ ...payload, project_id: currentProjectId });
     setTasks((prev) => upsertTaskInList(prev, created));
@@ -340,8 +327,9 @@ export default function BoardPage() {
             {projectOverdue > 0 && <span className={styles.subOverdue}> · {projectOverdue} overdue</span>}
           </p>
         </div>
-        <button className="btn btn-primary" onClick={() => setShowNewTaskModal(true)}>
-          + New task
+        <button className={styles.newTaskBtn} onClick={() => setShowNewTaskModal(true)}>
+          <span className={styles.newTaskPlus} aria-hidden="true">+</span>
+          New task
         </button>
       </div>
 
@@ -480,7 +468,6 @@ export default function BoardPage() {
           onStatusChange={moveTask}
           onApprove={handleApprove}
           onDeny={handleDeny}
-          onQuickAdd={handleQuickAdd}
         />
       ) : (
         <DragDropContext onDragEnd={handleDragEnd}>
@@ -492,7 +479,6 @@ export default function BoardPage() {
                 label={col.label}
                 tasks={sortedTasks.filter((t) => t.status === col.status)}
                 onTaskClick={setSelectedTask}
-                onQuickAdd={handleQuickAdd}
                 selectMode={selectMode}
                 selectedIds={selectedIds}
                 onToggleSelect={toggleSelect}

@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { Droppable } from '@hello-pangea/dnd';
 import TaskCard from './TaskCard';
 import { isOverdue } from '../utils/dueDate';
@@ -16,7 +15,6 @@ export default function KanbanColumn({
   label,
   tasks,
   onTaskClick,
-  onQuickAdd,
   selectMode,
   selectedIds,
   onToggleSelect,
@@ -26,20 +24,11 @@ export default function KanbanColumn({
   currentUser,
   now,
 }) {
-  const [draft, setDraft] = useState('');
   const overdueCount = tasks.filter((t) => isOverdue(t.due_date, t.status, now)).length;
 
   // Done is reached only through PM/admin approval of a Review task, so a
   // member can't drag into it or quick-add straight into it.
   const doneLockedForUser = status === 'done' && !canApprove;
-
-  function handleAdd(e) {
-    e.preventDefault();
-    const title = draft.trim();
-    if (!title) return;
-    onQuickAdd(status, title);
-    setDraft('');
-  }
 
   return (
     <div className={styles.column} style={{ '--column-accent': STATUS_COLORS[status] }}>
@@ -89,16 +78,6 @@ export default function KanbanColumn({
         )}
       </Droppable>
 
-      {!doneLockedForUser && (
-        <form className={styles.quickAdd} onSubmit={handleAdd}>
-          <input
-            className={styles.quickAddInput}
-            placeholder="+ Add a task"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-          />
-        </form>
-      )}
     </div>
   );
 }

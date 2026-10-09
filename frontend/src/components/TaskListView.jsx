@@ -47,10 +47,8 @@ export default function TaskListView({
   onStatusChange,
   onApprove,
   onDeny,
-  onQuickAdd,
 }) {
   const [sort, setSort] = useState(null); // { key, dir: 'asc' | 'desc' } | null
-  const [draft, setDraft] = useState('');
 
   const rows = useMemo(() => {
     if (!sort) return tasks;
@@ -90,14 +88,6 @@ export default function TaskListView({
 
   const selectableIds = rows.filter(canMoveTask).map((t) => t.id);
   const allSelected = selectableIds.length > 0 && selectableIds.every((id) => selectedIds.includes(id));
-
-  function handleAdd(e) {
-    e.preventDefault();
-    const title = draft.trim();
-    if (!title) return;
-    onQuickAdd('todo', title);
-    setDraft('');
-  }
 
   const colCount = 5 + (selectMode ? 1 : 0) + (canApprove ? 1 : 0); // title..due, + select, + actions
 
@@ -282,14 +272,6 @@ export default function TaskListView({
         </table>
       </div>
 
-      <form className={styles.quickAdd} onSubmit={handleAdd}>
-        <input
-          className={styles.quickAddInput}
-          placeholder="+ Add a task (it goes to To Do)"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-        />
-      </form>
     </div>
   );
 }
