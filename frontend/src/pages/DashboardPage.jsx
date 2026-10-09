@@ -21,7 +21,7 @@ import { colorForProject } from '../utils/projectColor';
 const STATUS_LABELS = { todo: 'To Do', in_progress: 'In Progress', review: 'Review', done: 'Done' };
 const STATUS_COLORS = {
   todo: '#8b9490',
-  in_progress: '#c98a3e',
+  in_progress: 'var(--status-in-progress)',
   review: '#6e8fa8',
   done: '#6b9080',
 };
@@ -40,14 +40,75 @@ function timeAgo(dateStr) {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
+// ---- date range helpers (local calendar dates as 'YYYY-MM-DD') ----
+function toDateStr(d) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+const RANGE_PRESETS = [
+  {
+    key: 'this-month',
+    label: 'This month',
+    range: () => {
+      const n = new Date();
+      return [toDateStr(new Date(n.getFullYear(), n.getMonth(), 1)), toDateStr(new Date(n.getFullYear(), n.getMonth() + 1, 0))];
+    },
+  },
+  {
+    key: 'last-month',
+    label: 'Last month',
+    range: () => {
+      const n = new Date();
+      return [toDateStr(new Date(n.getFullYear(), n.getMonth() - 1, 1)), toDateStr(new Date(n.getFullYear(), n.getMonth(), 0))];
+    },
+  },
+  {
+    key: 'last-30',
+    label: 'Last 30 days',
+    range: () => {
+      const n = new Date();
+      return [toDateStr(new Date(n.getFullYear(), n.getMonth(), n.getDate() - 29)), toDateStr(n)];
+    },
+  },
+  {
+    key: 'last-90',
+    label: 'Last 90 days',
+    range: () => {
+      const n = new Date();
+      return [toDateStr(new Date(n.getFullYear(), n.getMonth(), n.getDate() - 89)), toDateStr(n)];
+    },
+  },
+  {
+    key: 'this-year',
+    label: 'This year',
+    range: () => {
+      const n = new Date();
+      return [toDateStr(new Date(n.getFullYear(), 0, 1)), toDateStr(new Date(n.getFullYear(), 11, 31))];
+    },
+  },
+];
+
+const RANGE_STORAGE_KEY = 'dashboardDateRange';
+
+function initialRange() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(RANGE_STORAGE_KEY) || 'null');
+    if (saved && /^\d{4}-\d{2}-\d{2}$/.test(saved.from) && /^\d{4}-\d{2}-\d{2}$/.test(saved.to)) return saved;
+  } catch (err) {
+    // ignore — fall back to this month
+  }
+  const [from, to] = RANGE_PRESETS[0].range();
+  return { from, to };
+}
+
 function pct(numerator, denominator) {
   if (!denominator) return 0;
   return Math.round((numerator / denominator) * 100);
 }
 
-// One period's report (This Month, or the fiscal year) — stat cards, a
+// One period's report (the selected date range) — stat cards, a
 // status/priority breakdown, and a per-project / per-assignee rundown.
-// Shared between both periods on the "All projects" view.
 function PeriodSection({ title, subtitle, data }) {
   const statusData = Object.entries(data.byStatus).map(([status, count]) => ({
     status,
@@ -91,10 +152,10 @@ function PeriodSection({ title, subtitle, data }) {
           <p className={styles.chartTitle}>By status</p>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={statusData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#3a403e" vertical={false} />
-              <XAxis dataKey="label" stroke="#9aa39e" fontSize={12} />
-              <YAxis stroke="#9aa39e" fontSize={12} allowDecimals={false} />
-              <Tooltip contentStyle={{ background: '#2d3231', border: '1px solid #3a403e', fontSize: 13 }} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+              <XAxis dataKey="label" stroke="var(--color-text-muted)" fontSize={12} />
+              <YAxis stroke="var(--color-text-muted)" fontSize={12} allowDecimals={false} />
+              <Tooltip contentStyle={{ background: 'var(--color-surface-raised)', border: '1px solid var(--color-border)', color: 'var(--color-text)', fontSize: 13 }} />
               <Bar dataKey="count" radius={[4, 4, 0, 0]}>
                 {statusData.map((entry) => (
                   <Cell key={entry.status} fill={STATUS_COLORS[entry.status]} />
@@ -113,8 +174,8 @@ function PeriodSection({ title, subtitle, data }) {
                   <Cell key={entry.priority} fill={PRIORITY_COLORS[entry.priority]} />
                 ))}
               </Pie>
-              <Legend wrapperStyle={{ fontSize: 12, color: '#9aa39e' }} />
-              <Tooltip contentStyle={{ background: '#2d3231', border: '1px solid #3a403e', fontSize: 13 }} />
+              <Legend wrapperStyle={{ fontSize: 12, color: 'var(--color-text-muted)' }} />
+              <Tooltip contentStyle={{ background: 'var(--color-surface-raised)', border: '1px solid var(--color-border)', color: 'var(--color-text)', fontSize: 13 }} />
             </PieChart>
           </ResponsiveContainer>
         </div>
@@ -243,10 +304,10 @@ function SingleProjectDashboard({ projectId }) {
           <p className={styles.chartTitle}>Tasks by status</p>
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={statusData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#3a403e" vertical={false} />
-              <XAxis dataKey="label" stroke="#9aa39e" fontSize={12} />
-              <YAxis stroke="#9aa39e" fontSize={12} allowDecimals={false} />
-              <Tooltip contentStyle={{ background: '#2d3231', border: '1px solid #3a403e', fontSize: 13 }} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+              <XAxis dataKey="label" stroke="var(--color-text-muted)" fontSize={12} />
+              <YAxis stroke="var(--color-text-muted)" fontSize={12} allowDecimals={false} />
+              <Tooltip contentStyle={{ background: 'var(--color-surface-raised)', border: '1px solid var(--color-border)', color: 'var(--color-text)', fontSize: 13 }} />
               <Bar dataKey="count" radius={[4, 4, 0, 0]}>
                 {statusData.map((entry) => (
                   <Cell key={entry.status} fill={STATUS_COLORS[entry.status]} />
@@ -265,8 +326,8 @@ function SingleProjectDashboard({ projectId }) {
                   <Cell key={entry.priority} fill={PRIORITY_COLORS[entry.priority]} />
                 ))}
               </Pie>
-              <Legend wrapperStyle={{ fontSize: 12, color: '#9aa39e' }} />
-              <Tooltip contentStyle={{ background: '#2d3231', border: '1px solid #3a403e', fontSize: 13 }} />
+              <Legend wrapperStyle={{ fontSize: 12, color: 'var(--color-text-muted)' }} />
+              <Tooltip contentStyle={{ background: 'var(--color-surface-raised)', border: '1px solid var(--color-border)', color: 'var(--color-text)', fontSize: 13 }} />
             </PieChart>
           </ResponsiveContainer>
         </div>
@@ -275,11 +336,11 @@ function SingleProjectDashboard({ projectId }) {
           <p className={styles.chartTitle}>Open tasks per team member</p>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={assigneeData} layout="vertical" margin={{ left: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#3a403e" horizontal={false} />
-              <XAxis type="number" stroke="#9aa39e" fontSize={12} allowDecimals={false} />
-              <YAxis type="category" dataKey="name" stroke="#9aa39e" fontSize={12} width={80} />
-              <Tooltip contentStyle={{ background: '#2d3231', border: '1px solid #3a403e', fontSize: 13 }} />
-              <Bar dataKey="count" fill="#c98a3e" radius={[0, 4, 4, 0]} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" horizontal={false} />
+              <XAxis type="number" stroke="var(--color-text-muted)" fontSize={12} allowDecimals={false} />
+              <YAxis type="category" dataKey="name" stroke="var(--color-text-muted)" fontSize={12} width={80} />
+              <Tooltip contentStyle={{ background: 'var(--color-surface-raised)', border: '1px solid var(--color-border)', color: 'var(--color-text)', fontSize: 13 }} />
+              <Bar dataKey="count" fill="var(--color-accent)" radius={[0, 4, 4, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -318,6 +379,7 @@ export default function DashboardPage() {
   );
   const [overview, setOverview] = useState(null);
   const [overviewError, setOverviewError] = useState('');
+  const [range, setRange] = useState(initialRange);
 
   const showingAllProjects = projectFilter === ALL_PROJECTS;
 
@@ -326,15 +388,36 @@ export default function DashboardPage() {
     localStorage.setItem(PROJECT_FILTER_STORAGE_KEY, value);
   }
 
+  function updateRange(next) {
+    setRange(next);
+    try {
+      localStorage.setItem(RANGE_STORAGE_KEY, JSON.stringify(next));
+    } catch (err) {
+      // storage blocked — the range just won't be remembered
+    }
+  }
+
+  const rangeInvalid = !range.from || !range.to || range.from > range.to;
+  const activePreset = RANGE_PRESETS.find((p) => {
+    const [f, t] = p.range();
+    return f === range.from && t === range.to;
+  });
+
   useEffect(() => {
-    if (!showingAllProjects) return;
+    if (!showingAllProjects || rangeInvalid) return;
     setOverview(null);
     setOverviewError('');
+    let cancelled = false;
     dashboardApi
-      .getOverview()
-      .then(setOverview)
-      .catch(() => setOverviewError('Could not load the consolidated report.'));
-  }, [showingAllProjects]);
+      .getOverview(range.from, range.to)
+      .then((data) => !cancelled && setOverview(data))
+      .catch((err) =>
+        !cancelled && setOverviewError(err.response?.data?.message || 'Could not load the consolidated report.')
+      );
+    return () => {
+      cancelled = true;
+    };
+  }, [showingAllProjects, range.from, range.to, rangeInvalid]);
 
   if (projects.length === 0) {
     return (
@@ -356,7 +439,7 @@ export default function DashboardPage() {
           <h1>{headerTitle}</h1>
           <p className={styles.subLine}>
             {showingAllProjects
-              ? 'A consolidated snapshot across every project — this month and this fiscal year.'
+              ? 'A consolidated snapshot across every project for the dates you choose.'
               : 'A snapshot of where this project stands right now.'}
           </p>
         </div>
@@ -373,8 +456,50 @@ export default function DashboardPage() {
         </label>
       </div>
 
+      {showingAllProjects && (
+        <div className={styles.rangeBar}>
+          <div className={styles.presetChips}>
+            {RANGE_PRESETS.map((p) => (
+              <button
+                key={p.key}
+                type="button"
+                className={`${styles.presetChip} ${activePreset?.key === p.key ? styles.presetChipActive : ''}`}
+                onClick={() => {
+                  const [from, to] = p.range();
+                  updateRange({ from, to });
+                }}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          <div className={styles.rangeInputs}>
+            <label className={styles.rangeLabel}>
+              From
+              <input
+                type="date"
+                value={range.from}
+                max={range.to || undefined}
+                onChange={(e) => updateRange({ ...range, from: e.target.value })}
+              />
+            </label>
+            <label className={styles.rangeLabel}>
+              To
+              <input
+                type="date"
+                value={range.to}
+                min={range.from || undefined}
+                onChange={(e) => updateRange({ ...range, to: e.target.value })}
+              />
+            </label>
+          </div>
+        </div>
+      )}
+
       {showingAllProjects ? (
-        overviewError ? (
+        rangeInvalid ? (
+          <p className={styles.subLine}>Pick a start and end date (the end can't be before the start).</p>
+        ) : overviewError ? (
           <p style={{ color: 'var(--priority-high)' }}>{overviewError}</p>
         ) : !overview ? (
           <p className={styles.subLine}>Loading…</p>
@@ -401,8 +526,7 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            <PeriodSection title="This Month" subtitle={overview.month.label} data={overview.month} />
-            <PeriodSection title="Fiscal Year" subtitle={overview.fiscalYear.label} data={overview.fiscalYear} />
+            <PeriodSection title="Selected period" subtitle={overview.period.label} data={overview.period} />
           </>
         )
       ) : (

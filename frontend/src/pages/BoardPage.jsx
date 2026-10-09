@@ -8,6 +8,7 @@ import socket from '../api/socket';
 import { isOverdue } from '../utils/dueDate';
 import { colorForProject } from '../utils/projectColor';
 import KanbanColumn from '../components/KanbanColumn';
+import ProjectSwitcher from '../components/ProjectSwitcher';
 import NewTaskModal from '../components/NewTaskModal';
 import TaskDetailModal from '../components/TaskDetailModal';
 import TaskListView from '../components/TaskListView';
@@ -345,6 +346,7 @@ export default function BoardPage() {
 
       <div className={styles.toolbar}>
         <div className={styles.filterBar}>
+          <ProjectSwitcher canManageProjects={canApprove} />
           <input
             placeholder="Search tasks…"
             value={searchQuery}
