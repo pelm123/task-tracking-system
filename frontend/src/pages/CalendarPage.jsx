@@ -4,6 +4,7 @@ import * as tasksApi from '../api/tasks';
 import * as usersApi from '../api/users';
 import TaskDetailModal from '../components/TaskDetailModal';
 import styles from './calendar.module.css';
+import { colorForProject } from '../utils/projectColor';
 
 const PRIORITY_COLORS = {
   low: 'var(--priority-low)',
@@ -53,19 +54,6 @@ function formatMonthLabel(date) {
 
 function formatShortDate(dateStr) {
   return new Date(dateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-}
-
-// Deterministic color per project (same project always gets the same
-// color), so tasks from different projects are visually distinguishable
-// when the calendar is showing "All projects" at once — independent of the
-// priority color already used for the chip's left border.
-function colorForProject(projectId) {
-  if (!projectId) return 'var(--color-text-muted)';
-  let hash = 0;
-  for (let i = 0; i < projectId.length; i++) {
-    hash = (hash * 31 + projectId.charCodeAt(i)) >>> 0;
-  }
-  return `hsl(${hash % 360}, 60%, 55%)`;
 }
 
 const ALL_PROJECTS = 'all';

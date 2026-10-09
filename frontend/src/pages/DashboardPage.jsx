@@ -16,6 +16,7 @@ import * as dashboardApi from '../api/dashboard';
 import * as projectsApi from '../api/projects';
 import { useProject } from '../context/ProjectContext';
 import styles from './dashboard.module.css';
+import { colorForProject } from '../utils/projectColor';
 
 const STATUS_LABELS = { todo: 'To Do', in_progress: 'In Progress', review: 'Review', done: 'Done' };
 const STATUS_COLORS = {
@@ -28,17 +29,6 @@ const PRIORITY_COLORS = { low: '#7c8985', medium: '#c9a63e', high: '#c9603e' };
 
 const ALL_PROJECTS = 'all';
 const PROJECT_FILTER_STORAGE_KEY = 'dashboardProjectFilter';
-
-// Same deterministic hash-to-color used on the Calendar page and the
-// project switcher, so a given project reads as the same color everywhere.
-function colorForProject(projectId) {
-  if (!projectId) return 'var(--color-text-muted)';
-  let hash = 0;
-  for (let i = 0; i < projectId.length; i++) {
-    hash = (hash * 31 + projectId.charCodeAt(i)) >>> 0;
-  }
-  return `hsl(${hash % 360}, 60%, 55%)`;
-}
 
 function timeAgo(dateStr) {
   const diffMs = Date.now() - new Date(dateStr).getTime();

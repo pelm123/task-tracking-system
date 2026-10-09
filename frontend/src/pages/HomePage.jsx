@@ -11,6 +11,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import { notificationMeta } from '../utils/notificationTypes';
 import { getDueCountdown, isOverdue, formatOverdueShort } from '../utils/dueDate';
 import styles from './home.module.css';
+import { colorForProject } from '../utils/projectColor';
 
 const PRIORITY_LABELS = { low: 'Low', medium: 'Medium', high: 'High' };
 const STATUS_LABELS ={ todo: 'To Do', in_progress: 'In Progress', review: 'Review', done: 'Done' };
@@ -28,17 +29,6 @@ const PRIORITY_COLORS = {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const REFRESH_MS = 2 * 60 * 1000;
-
-// Same deterministic hash-to-color used on Calendar / Dashboard / the project
-// switcher, so a project is the same color everywhere in the app.
-function colorForProject(projectId) {
-  if (!projectId) return 'var(--color-text-muted)';
-  let hash = 0;
-  for (let i = 0; i < projectId.length; i++) {
-    hash = (hash * 31 + projectId.charCodeAt(i)) >>> 0;
-  }
-  return `hsl(${hash % 360}, 60%, 55%)`;
-}
 
 function startOfDay(date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());

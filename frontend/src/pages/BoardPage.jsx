@@ -230,18 +230,26 @@ export default function BoardPage() {
   const projectOverdue = tasks.filter((t) => isOverdue(t.due_date, t.status, now)).length;
   const overdueTotal = filteredTasks.filter((t) => isOverdue(t.due_date, t.status, now)).length;
 
-  // Overdue first, most overdue (earliest due date) at the very top; every
-  // other task keeps its existing order (Array.sort is stable).
-  const sortedTasks = overdueFirst
-    ? [...filteredTasks].sort((a, b) => {
-        const aLate = isOverdue(a.due_date, a.status, now);
-        const bLate = isOverdue(b.due_date, b.status, now);
-        if (aLate && bLate) return new Date(a.due_date) - new Date(b.due_date);
-        if (aLate) return -1;
-        if (bLate) return 1;
-        return 0;
-      })
-    : filteredTasks;
+  // Default order everywhere (columns and list): priority first (high → low),
+  // then due date (earliest first, tasks without a due date last). With
+  // "Overdue first" on, overdue tasks are pulled to the top of that order.
+  const PRIORITY_RANK = { high: 0, medium: 1, low: 2 };
+  const sortedTasks = [...filteredTasks].sort((a, b) => {
+    if (overdueFirst) {
+      const aLate = isOverdue(a.due_date, a.status, now);
+      const bLate = isOverdue(b.due_date, b.status, now);
+      if (aLate !== bLate) return aLate ? -1 : 1;
+    }
+    const pr = (PRIORITY_RANK[a.priority] ?? 3) - (PRIORITY_RANK[b.priority] ?? 3);
+    if (pr !== 0) return pr;
+    if (a.due_date && b.due_date) {
+      const d = new Date(a.due_date) - new Date(b.due_date);
+      if (d !== 0) return d;
+    } else if (a.due_date || b.due_date) {
+      return a.due_date ? -1 : 1;
+    }
+    return new Date(b.created_at) - new Date(a.created_at);
+  });
 
   function toggleOverdueFirst() {
     const next = !overdueFirst;

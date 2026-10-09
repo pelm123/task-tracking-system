@@ -2,17 +2,7 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { useProject } from '../context/ProjectContext';
 import styles from './projectSwitcher.module.css';
-
-// Same deterministic hash-to-color used on the Calendar page, so a given
-// project reads as the same color everywhere in the app.
-function colorForProject(projectId) {
-  if (!projectId) return 'var(--color-text-muted)';
-  let hash = 0;
-  for (let i = 0; i < projectId.length; i++) {
-    hash = (hash * 31 + projectId.charCodeAt(i)) >>> 0;
-  }
-  return `hsl(${hash % 360}, 60%, 55%)`;
-}
+import { colorForProject } from '../utils/projectColor';
 
 const SEARCH_THRESHOLD = 6;
 
