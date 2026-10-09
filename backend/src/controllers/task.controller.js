@@ -175,12 +175,20 @@ async function getTask(req, res) {
   }
 }
 
+// Keep in sync with tasks.title VARCHAR(500) and the forms' maxLength.
+const MAX_TITLE_LENGTH = 500;
+
 // POST /tasks
 async function createTask(req, res) {
   const { title, description, priority, due_date, reminder_hours_before, assignee_ids, project_id } = req.body;
 
   if (!title) {
     return res.status(400).json({ message: 'title is required' });
+  }
+  if (title.length > MAX_TITLE_LENGTH) {
+    return res.status(400).json({
+      message: `Title is too long (${title.length} characters). The limit is ${MAX_TITLE_LENGTH}.`,
+    });
   }
   if (!project_id) {
     return res.status(400).json({ message: 'project_id is required' });
@@ -277,6 +285,11 @@ async function checkMemberAssigneeChange(taskId, newIds) {
 async function updateTask(req, res) {
   const { title, description, priority, due_date, reminder_hours_before, assignee_ids } = req.body;
 
+  if (title !== undefined && title !== null && title.length > MAX_TITLE_LENGTH) {
+    return res.status(400).json({
+      message: `Title is too long (${title.length} characters). The limit is ${MAX_TITLE_LENGTH}.`,
+    });
+  }
   if (priority && !VALID_PRIORITIES.includes(priority)) {
     return res.status(400).json({ message: `priority must be one of ${VALID_PRIORITIES.join(', ')}` });
   }

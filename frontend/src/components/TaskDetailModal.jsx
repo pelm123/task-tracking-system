@@ -331,6 +331,7 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
             id="dTitle"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
+            maxLength={500}
             disabled={isUnassignedMember}
           />
         </div>

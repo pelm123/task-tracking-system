@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import styles from './modal.module.css';
 
+const MAX_NAME_LENGTH = 500; // keep in sync with the backend / projects.name
+
 export default function NewProjectModal({ onClose, onCreate }) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -38,7 +40,19 @@ export default function NewProjectModal({ onClose, onCreate }) {
         <form onSubmit={handleSubmit}>
           <div className={styles.field}>
             <label htmlFor="pName">Name</label>
-            <input id="pName" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+            <input
+              id="pName"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Website Redesign"
+              maxLength={MAX_NAME_LENGTH}
+              autoFocus
+            />
+            {name.length > MAX_NAME_LENGTH * 0.8 && (
+              <span style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4, display: 'block', textAlign: 'right' }}>
+                {name.length}/{MAX_NAME_LENGTH}
+              </span>
+            )}
           </div>
 
           <div className={styles.field}>
@@ -47,6 +61,7 @@ export default function NewProjectModal({ onClose, onCreate }) {
               id="pDescription"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
+              placeholder="Optional — what's this project for?"
             />
           </div>
 

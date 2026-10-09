@@ -69,7 +69,7 @@ export default function NewTaskModal({ users, onClose, onCreate }) {
         <form onSubmit={handleSubmit}>
           <div className={styles.field}>
             <label htmlFor="title">Title</label>
-            <input id="title" value={title} onChange={(e) => setTitle(e.target.value)} autoFocus />
+            <input id="title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={500} autoFocus />
           </div>
 
           <div className={styles.field}>

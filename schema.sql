@@ -34,7 +34,7 @@ CREATE TABLE users (
 -- ── Projects ────────────────────────────────────────────────
 CREATE TABLE projects (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    name        VARCHAR(150) NOT NULL,
+    name        VARCHAR(500) NOT NULL,
     description TEXT,
     created_by  UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -44,7 +44,7 @@ CREATE TABLE projects (
 CREATE TABLE tasks (
     id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     project_id   UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-    title        VARCHAR(200) NOT NULL,
+    title        VARCHAR(500) NOT NULL,
     description  TEXT,
     status       task_status NOT NULL DEFAULT 'todo',
     priority     task_priority NOT NULL DEFAULT 'medium',
