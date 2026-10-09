@@ -21,6 +21,7 @@ async function getSummary(req, res) {
          FROM users u
          LEFT JOIN task_assignees ta ON ta.user_id = u.id
          LEFT JOIN tasks t ON t.id = ta.task_id AND t.status != 'done' ${project_id ? 'AND t.project_id = $1' : ''}
+         WHERE u.is_approved = TRUE
          GROUP BY u.id, u.name
          ORDER BY count DESC`,
         params
@@ -71,19 +72,6 @@ function getMonthPeriod(now = new Date()) {
   const end = bangkokMidnightUTC(y, m + 1, 1);
   const label = start.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'Asia/Bangkok' });
   return { start, end, label };
-}
-
-// Thai government fiscal year: 1 Oct – 30 Sep, named after the Buddhist-era
-// year it ENDS in (e.g. 1 Oct 2026 – 30 Sep 2027 AD is "ปีงบประมาณ 2570").
-function getFiscalYearPeriod(now = new Date()) {
-  const { y, m } = bangkokDateParts(now); // m is 0-indexed; October = 9
-  const startYear = m >= 9 ? y : y - 1;
-  const endYear = startYear + 1;
-  const start = bangkokMidnightUTC(startYear, 9, 1);
-  const end = bangkokMidnightUTC(endYear, 9, 1);
-  const beYear = endYear + 543;
-  const label = `FY${beYear} (Oct ${startYear} – Sep ${endYear})`;
-  return { start, end, label, beYear };
 }
 
 // One period's full report, aggregated across every project. "Period tasks"
@@ -155,15 +143,73 @@ async function buildPeriodReport(start, end) {
   };
 }
 
-// GET /dashboard/overview — consolidated, all-projects report for the
-// current month and the current Thai government fiscal year.
+const DATE_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+const MAX_RANGE_DAYS = 366 * 5;
+
+// 'YYYY-MM-DD' → { y, m (0-indexed), d } or null when it isn't a real date
+function parseDateParam(value) {
+  const match = DATE_RE.exec(value || '');
+  if (!match) return null;
+  const y = Number(match[1]);
+  const m = Number(match[2]) - 1;
+  const d = Number(match[3]);
+  const check = new Date(Date.UTC(y, m, d));
+  if (check.getUTCFullYear() !== y || check.getUTCMonth() !== m || check.getUTCDate() !== d) return null;
+  return { y, m, d };
+}
+
+function formatRangeLabel(from, to) {
+  const fmt = (p) =>
+    new Date(Date.UTC(p.y, p.m, p.d)).toLocaleDateString('en-GB', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+      timeZone: 'UTC',
+    });
+  return from.y === to.y && from.m === to.m && from.d === to.d ? fmt(from) : `${fmt(from)} – ${fmt(to)}`;
+}
+
+// GET /dashboard/overview?from=YYYY-MM-DD&to=YYYY-MM-DD — consolidated,
+// all-projects report for the chosen date range (both days included, in
+// Bangkok time). With no range it defaults to the current month.
 async function getOverview(req, res) {
   try {
     const now = new Date();
-    const monthPeriod = getMonthPeriod(now);
-    const fyPeriod = getFiscalYearPeriod(now);
+    let start;
+    let end;
+    let label;
+    let fromStr;
+    let toStr;
 
-    const [totalsRow, month, fiscalYear] = await Promise.all([
+    if (req.query.from || req.query.to) {
+      const from = parseDateParam(req.query.from);
+      const to = parseDateParam(req.query.to);
+      if (!from || !to) {
+        return res.status(400).json({ message: 'from and to must both be dates in YYYY-MM-DD format.' });
+      }
+      start = bangkokMidnightUTC(from.y, from.m, from.d);
+      end = bangkokMidnightUTC(to.y, to.m, to.d + 1); // end is exclusive
+      if (end <= start) {
+        return res.status(400).json({ message: 'The end date cannot be before the start date.' });
+      }
+      if ((end - start) / 86400000 > MAX_RANGE_DAYS) {
+        return res.status(400).json({ message: 'Please choose a range of 5 years or less.' });
+      }
+      label = formatRangeLabel(from, to);
+      fromStr = req.query.from;
+      toStr = req.query.to;
+    } else {
+      const month = getMonthPeriod(now);
+      start = month.start;
+      end = month.end;
+      label = month.label;
+      const { y, m } = bangkokDateParts(now);
+      const pad = (n) => String(n).padStart(2, '0');
+      fromStr = `${y}-${pad(m + 1)}-01`;
+      toStr = `${y}-${pad(m + 1)}-${pad(new Date(Date.UTC(y, m + 1, 0)).getUTCDate())}`;
+    }
+
+    const [totalsRow, period] = await Promise.all([
       pool.query(`
         SELECT
           (SELECT COUNT(*)::int FROM projects) AS projects,
@@ -171,15 +217,13 @@ async function getOverview(req, res) {
           (SELECT COUNT(*)::int FROM tasks WHERE status = 'done') AS completed,
           (SELECT COUNT(*)::int FROM tasks WHERE due_date IS NOT NULL AND due_date < now() AND status != 'done') AS overdue
       `),
-      buildPeriodReport(monthPeriod.start, monthPeriod.end),
-      buildPeriodReport(fyPeriod.start, fyPeriod.end),
+      buildPeriodReport(start, end),
     ]);
 
     res.json({
       generatedAt: now.toISOString(),
       totals: totalsRow.rows[0],
-      month: { label: monthPeriod.label, ...month },
-      fiscalYear: { label: fyPeriod.label, beYear: fyPeriod.beYear, ...fiscalYear },
+      period: { label, from: fromStr, to: toStr, ...period },
     });
   } catch (err) {
     console.error('Dashboard overview error:', err.message);
