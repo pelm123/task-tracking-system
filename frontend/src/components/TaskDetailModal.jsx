@@ -60,6 +60,10 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
   // upload files to it — only a PM/admin assigning them changes that.
   // Mirrors the backend checks in updateTask/createComment/uploadAttachment.
   const isUnassignedMember = currentUser.role === 'member' && !isAssignee && !isCreator;
+  // Files (preview AND download): only admin/pm, assignees and the creator.
+  // Anyone else can see that files are attached but can't open them. Mirrors
+  // the backend check (canOpenFiles in attachment.controller.js).
+  const canOpenFiles = !isUnassignedMember;
   // admin/pm can delete any task; a member can delete only a task they
   // created themselves — mirrors the backend check in deleteTask
   const canDelete = canApprove || task.created_by === currentUser.id;
@@ -239,6 +243,7 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
   }
 
   async function handleDownload(att) {
+    if (!canOpenFiles) return;
     try {
       await attachmentsApi.downloadAttachment(att.id, att.file_name);
     } catch (err) {
@@ -249,6 +254,10 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
   // Clicking an image/PDF's name opens it in the in-app preview modal;
   // anything else just downloads, same as before.
   async function handleOpenAttachment(att) {
+    if (!canOpenFiles) {
+      setError('Only people assigned to this task (and PMs/admins) can open or download its files.');
+      return;
+    }
     if (!attachmentsApi.isPreviewable(att.mime_type)) {
       return handleDownload(att);
     }
@@ -562,16 +571,28 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
                     <button
                       className={styles.attachmentName}
                       onClick={() => handleOpenAttachment(a)}
-                      title={previewable ? 'Click to preview' : 'Click to download'}
+                      disabled={!canOpenFiles}
+                      style={canOpenFiles ? undefined : { cursor: 'not-allowed', opacity: 0.7, textDecoration: 'none' }}
+                      title={
+                        !canOpenFiles
+                          ? 'Only people assigned to this task can open this file'
+                          : previewable
+                            ? 'Click to preview'
+                            : 'Click to download'
+                      }
                     >
-                      {previewable && <span aria-hidden="true">🖼 </span>}
+                      {!canOpenFiles ? (
+                        <span aria-hidden="true">🔒 </span>
+                      ) : (
+                        previewable && <span aria-hidden="true">🖼 </span>
+                      )}
                       {a.file_name}
                     </button>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <span style={{ color: 'var(--color-text-muted)' }}>
                         {(a.file_size / 1024).toFixed(0)} KB
                       </span>
-                      {previewable && (
+                      {previewable && canOpenFiles && (
                         <button
                           onClick={() => handleDownload(a)}
                           style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', fontSize: 12, padding: 0 }}
@@ -597,7 +618,7 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
 
           {isUnassignedMember ? (
             <p className={styles.emptyText} style={{ marginTop: 8 }}>
-              You're not assigned to this task, so you can't upload files to it.
+              You're not assigned to this task, so you can't open, download or upload its files.
             </p>
           ) : (
             <>

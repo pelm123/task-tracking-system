@@ -92,17 +92,42 @@ async function uploadAttachment(req, res) {
   }
 }
 
+// Who may open a file (preview OR download): admin/pm, the task's assignees,
+// and the task's creator (same "assigned-or-creator" rule as upload/delete).
+// A member who isn't on the task can see that the task has attachments, but
+// can't open them in any way. Returns true if allowed.
+async function canOpenFiles(user, taskId, createdBy) {
+  if (user.role !== 'member') return true;
+  if (createdBy === user.id) return true;
+  const assignedCheck = await pool.query(
+    'SELECT 1 FROM task_assignees WHERE task_id = $1 AND user_id = $2',
+    [taskId, user.id]
+  );
+  return assignedCheck.rows.length > 0;
+}
+
+const NOT_ASSIGNED_FILES_MESSAGE =
+  'Only people assigned to this task (and PMs/admins) can open or download its files.';
+
 // GET /attachments/:id/download
 async function downloadAttachment(req, res) {
   try {
     const result = await pool.query(
-      'SELECT file_name, file_path, mime_type FROM attachments WHERE id = $1',
+      `SELECT a.file_name, a.file_path, a.mime_type, a.task_id, t.created_by
+       FROM attachments a
+       JOIN tasks t ON t.id = a.task_id
+       WHERE a.id = $1`,
       [req.params.id]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'Attachment not found' });
     }
-    const { file_name, file_path, mime_type } = result.rows[0];
+    const { file_name, file_path, mime_type, task_id, created_by } = result.rows[0];
+
+    if (!(await canOpenFiles(req.user, task_id, created_by))) {
+      return res.status(403).json({ message: NOT_ASSIGNED_FILES_MESSAGE });
+    }
+
     const fullPath = path.join(UPLOAD_DIR, file_path);
 
     if (!fs.existsSync(fullPath)) {
@@ -130,13 +155,20 @@ function isPreviewable(mimeType) {
 async function previewAttachment(req, res) {
   try {
     const result = await pool.query(
-      'SELECT file_name, file_path, mime_type FROM attachments WHERE id = $1',
+      `SELECT a.file_name, a.file_path, a.mime_type, a.task_id, t.created_by
+       FROM attachments a
+       JOIN tasks t ON t.id = a.task_id
+       WHERE a.id = $1`,
       [req.params.id]
     );
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'Attachment not found' });
     }
-    const { file_name, file_path, mime_type } = result.rows[0];
+    const { file_name, file_path, mime_type, task_id, created_by } = result.rows[0];
+
+    if (!(await canOpenFiles(req.user, task_id, created_by))) {
+      return res.status(403).json({ message: NOT_ASSIGNED_FILES_MESSAGE });
+    }
 
     if (!isPreviewable(mime_type)) {
       return res.status(400).json({ message: 'This file type cannot be previewed.' });
