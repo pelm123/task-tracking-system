@@ -1,4 +1,16 @@
+const bcrypt = require('bcrypt');
 const pool = require('../config/db');
+
+const SALT_ROUNDS = 10;
+
+// how many approved admins exist besides `excludeId`
+async function otherAdminCount(excludeId) {
+  const r = await pool.query(
+    "SELECT COUNT(*)::int AS n FROM users WHERE role = 'admin' AND is_approved = TRUE AND id <> $1",
+    [excludeId]
+  );
+  return r.rows[0].n;
+}
 
 // GET /users — minimal fields only, used to populate assignee dropdowns etc.
 async function listUsers(req, res) {
@@ -53,7 +65,19 @@ async function updateUserRole(req, res) {
     return res.status(400).json({ message: 'role must be "admin", "pm", or "member"' });
   }
 
+  if (req.params.id === req.user.id) {
+    return res.status(400).json({ message: "You can't change your own role" });
+  }
+
   try {
+    // never leave the system without an admin
+    if (role !== 'admin') {
+      const target = await pool.query('SELECT role FROM users WHERE id = $1', [req.params.id]);
+      if (target.rows[0]?.role === 'admin' && (await otherAdminCount(req.params.id)) === 0) {
+        return res.status(400).json({ message: 'There must always be at least one admin.' });
+      }
+    }
+
     const result = await pool.query(
       `UPDATE users SET role = $1::user_role WHERE id = $2
        RETURNING id, name, email, role, created_at`,
@@ -76,6 +100,11 @@ async function deleteUser(req, res) {
   }
 
   try {
+    const target = await pool.query('SELECT role FROM users WHERE id = $1', [req.params.id]);
+    if (target.rows[0]?.role === 'admin' && (await otherAdminCount(req.params.id)) === 0) {
+      return res.status(400).json({ message: 'There must always be at least one admin.' });
+    }
+
     const result = await pool.query('DELETE FROM users WHERE id = $1 RETURNING id', [req.params.id]);
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'User not found' });
@@ -87,4 +116,27 @@ async function deleteUser(req, res) {
   }
 }
 
-module.exports = { listUsers, listPendingUsers, approveUser, updateUserRole, deleteUser };
+// PATCH /users/:id/password — admin only. Sets a new password for someone
+// who has forgotten theirs (there's no email-based reset).
+async function resetUserPassword(req, res) {
+  const { newPassword } = req.body;
+  if (!newPassword || newPassword.length < 6) {
+    return res.status(400).json({ message: 'newPassword must be at least 6 characters' });
+  }
+  try {
+    const hash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+    const result = await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2 RETURNING id', [
+      hash,
+      req.params.id,
+    ]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    res.status(204).send();
+  } catch (err) {
+    console.error('Reset password error:', err.message);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+module.exports = { listUsers, listPendingUsers, approveUser, updateUserRole, deleteUser, resetUserPassword };
