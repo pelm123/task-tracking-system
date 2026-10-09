@@ -346,6 +346,49 @@
   color: var(--priority-high);
 }
 
+.acceptBtn,
+.submitBtn {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 7px 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: opacity 0.12s ease, background 0.12s ease;
+}
+
+.acceptBtn {
+  border: 1px solid var(--status-in-progress);
+  background: color-mix(in srgb, var(--status-in-progress) 16%, transparent);
+  color: var(--status-in-progress);
+}
+
+.submitBtn {
+  border: 1px solid var(--status-review);
+  background: color-mix(in srgb, var(--status-review) 16%, transparent);
+  color: var(--status-review);
+}
+
+.backBtn {
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-muted);
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+
+.backBtn:hover {
+  color: var(--color-text);
+  border-color: var(--color-text-muted);
+}
+
+.acceptBtn:hover,
+.submitBtn:hover,
 .approveBtn:hover,
 .denyBtn:hover {
   opacity: 0.8;

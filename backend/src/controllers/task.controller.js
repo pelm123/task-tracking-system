@@ -481,6 +481,17 @@ async function updateTaskStatus(req, res) {
       if (assignedCheck.rows.length === 0) {
         return res.status(403).json({ message: 'You can only move tasks you are assigned to.' });
       }
+      // Members move a task forward with the two buttons only: Accept
+      // (To Do → In Progress) and Submit for review (In Progress → Review).
+      const allowed =
+        (previousStatus === 'todo' && status === 'in_progress') ||
+        (previousStatus === 'in_progress' && status === 'review') ||
+        (previousStatus === 'in_progress' && status === 'todo'); // changed their mind
+      if (!allowed) {
+        return res.status(403).json({
+          message: 'Members can accept a To Do task, or move an In Progress task back to To Do or on to Review.',
+        });
+      }
     }
 
     // Track completed_at alongside status: set it the moment a task lands
@@ -675,6 +686,27 @@ async function bulkUpdateStatus(req, res) {
       );
       if (unowned.rows.length > 0) {
         return res.status(403).json({ message: 'You can only move tasks you are assigned to.' });
+      }
+    }
+
+    // Members only get Accept (To Do → In Progress) and, from In Progress,
+    // Submit for review or back to To Do, for the whole selection.
+    if (req.user.role === 'member') {
+      const requiredFrom = { in_progress: 'todo', review: 'in_progress', todo: 'in_progress' }[status];
+      if (!requiredFrom) {
+        return res.status(403).json({ message: 'Members can only accept tasks or submit them for review.' });
+      }
+      const wrongStage = await pool.query(
+        `SELECT 1 FROM tasks WHERE id = ANY($1::uuid[]) AND status <> $2::task_status LIMIT 1`,
+        [taskIds, requiredFrom]
+      );
+      if (wrongStage.rows.length > 0) {
+        return res.status(400).json({
+          message:
+            status === 'in_progress'
+              ? 'Only To Do tasks can be accepted. Deselect the others and try again.'
+              : 'Only In Progress tasks can be sent back to To Do or submitted for review. Deselect the others and try again.',
+        });
       }
     }
 

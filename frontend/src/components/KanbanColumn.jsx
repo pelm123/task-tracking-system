@@ -21,6 +21,7 @@ export default function KanbanColumn({
   canApprove,
   onApprove,
   onDeny,
+  onMove,
   currentUser,
   now,
 }) {
@@ -69,6 +70,7 @@ export default function KanbanColumn({
                 canApprove={canApprove}
                 onApprove={onApprove}
                 onDeny={onDeny}
+                onMove={onMove}
                 currentUser={currentUser}
                 now={now}
               />

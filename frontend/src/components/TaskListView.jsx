@@ -146,9 +146,6 @@ export default function TaskListView({
               const countdown = getDueCountdown(t.due_date, now);
               const movable = canMoveTask(t);
               const selected = selectedIds.includes(t.id);
-              const statusOptions = canApprove
-                ? ['todo', 'in_progress', 'review', 'done']
-                : ['todo', 'in_progress', 'review'];
 
               return (
                 <tr
@@ -179,25 +176,30 @@ export default function TaskListView({
                   </td>
 
                   <td onClick={(e) => e.stopPropagation()}>
-                    {t.status !== 'done' && movable && !selectMode ? (
-                      <select
-                        className={styles.statusSelect}
-                        style={{ '--status-color': STATUS_COLORS[t.status] }}
-                        value={t.status}
-                        onChange={(e) => onStatusChange(t.id, e.target.value)}
-                        aria-label={`Status of ${t.title}`}
-                      >
-                        {statusOptions.map((s) => (
-                          <option key={s} value={s}>
-                            {STATUS_LABELS[s]}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
+                    <span className={styles.statusCellInner}>
                       <span className={styles.statusBadge} style={{ '--status-color': STATUS_COLORS[t.status] }}>
                         {STATUS_LABELS[t.status]}
                       </span>
-                    )}
+                      {!selectMode && movable && t.status === 'todo' && (
+                        <button className={styles.acceptBtn} onClick={() => onStatusChange(t.id, 'in_progress')}>
+                          ▶ Accept
+                        </button>
+                      )}
+                      {!selectMode && movable && t.status === 'in_progress' && (
+                        <>
+                          <button
+                            className={styles.backBtn}
+                            title="Move back to To Do"
+                            onClick={() => onStatusChange(t.id, 'todo')}
+                          >
+                            ↩ To Do
+                          </button>
+                          <button className={styles.submitBtn} onClick={() => onStatusChange(t.id, 'review')}>
+                            ✓ Submit for review
+                          </button>
+                        </>
+                      )}
+                    </span>
                   </td>
 
                   <td>
