@@ -1,8 +1,10 @@
+import { getLocale } from '../i18n';
+
 // "6 Oct 2026, 21:48" — an exact date and time for comments, files and the
 // activity log. Uses the viewer's own time zone.
 export function formatDateTime(value) {
   if (!value) return '';
-  return new Date(value).toLocaleString('en-GB', {
+  return new Date(value).toLocaleString(getLocale(), {
     day: 'numeric',
     month: 'short',
     year: 'numeric',

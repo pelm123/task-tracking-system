@@ -12,13 +12,17 @@ import DashboardPage from './pages/DashboardPage';
 import AdminPage from './pages/AdminPage';
 import ProfilePage from './pages/ProfilePage';
 import AppHeader from './components/AppHeader';
+import { useLang } from './context/LanguageContext';
 import styles from './components/appHeader.module.css';
 
 function AuthedLayout({ children, managerOnly }) {
+  const { lang } = useLang();
+  // key={lang}: remount the page body when the language changes so every
+  // string and date helper re-evaluates; the header and auth state stay put.
   const content = (
     <ProjectProvider>
       <AppHeader />
-      <div className={styles.appBody}>{children}</div>
+      <div key={lang} className={styles.appBody}>{children}</div>
     </ProjectProvider>
   );
   return managerOnly ? (
