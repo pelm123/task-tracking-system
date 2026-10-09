@@ -1,0 +1,55 @@
+{
+  "common": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "close": "Close",
+    "confirm": "Confirm",
+    "loading": "Loading…",
+    "search": "Search",
+    "all": "All",
+    "none": "None",
+    "yes": "Yes",
+    "no": "No"
+  },
+  "nav": {
+    "brand": "Task Tracker",
+    "home": "Home",
+    "board": "Board",
+    "calendar": "Calendar",
+    "dashboard": "Dashboard",
+    "admin": "Admin"
+  },
+  "header": {
+    "lightMode": "Light",
+    "darkMode": "Dark",
+    "switchToLight": "Switch to light mode",
+    "switchToDark": "Switch to dark mode",
+    "switchLanguage": "Switch language",
+    "logout": "Log out"
+  },
+  "roles": {
+    "admin": "admin",
+    "pm": "pm",
+    "member": "member"
+  },
+  "units": {
+    "d": "d",
+    "h": "h",
+    "m": "m"
+  },
+  "dates": {
+    "overdueBy": "Overdue by {text}",
+    "dueIn": "Due in {text}"
+  },
+  "reminders": {
+    "h1": "1 hour before",
+    "h3": "3 hours before",
+    "h12": "12 hours before",
+    "h24": "1 day before",
+    "h48": "2 days before",
+    "h72": "3 days before",
+    "h168": "1 week before"
+  }
+}
