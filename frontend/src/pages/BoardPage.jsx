@@ -434,9 +434,9 @@ export default function BoardPage() {
             <option value="" disabled>
               Move to…
             </option>
-            <option value="todo">To Do</option>
-            <option value="in_progress">In Progress</option>
-            <option value="review">Review</option>
+            <option value="todo">{canApprove ? 'To Do' : 'Back to To Do'}</option>
+            <option value="in_progress">{canApprove ? 'In Progress' : 'Accept (In Progress)'}</option>
+            <option value="review">{canApprove ? 'Review' : 'Submit for review'}</option>
             {canApprove && <option value="done">Done</option>}
           </select>
           <select
@@ -493,6 +493,7 @@ export default function BoardPage() {
                 canApprove={canApprove}
                 onApprove={handleApprove}
                 onDeny={handleDeny}
+                onMove={moveTask}
                 currentUser={user}
                 now={now}
               />

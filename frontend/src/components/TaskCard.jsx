@@ -18,6 +18,7 @@ export default function TaskCard({
   canApprove,
   onApprove,
   onDeny,
+  onMove,
   currentUser,
   now,
 }) {
@@ -32,8 +33,9 @@ export default function TaskCard({
   const isAssignee = (task.assignees || []).some((a) => a.id === currentUser?.id);
   const canMove = canApprove || isAssignee;
 
+  // Status changes use the Accept / Submit buttons, so dragging is always off.
   return (
-    <Draggable draggableId={task.id} index={index} isDragDisabled={selectMode || !canMove}>
+    <Draggable draggableId={task.id} index={index} isDragDisabled>
       {(provided, snapshot) => (
         <div
           ref={provided.innerRef}
@@ -43,11 +45,10 @@ export default function TaskCard({
           style={{
             '--card-accent': PRIORITY_COLORS[task.priority],
             ...provided.draggableProps.style,
-            cursor: canMove ? undefined : 'default',
+            cursor: 'pointer',
             opacity: !selectMode && !canMove ? 0.75 : 1,
           }}
-          title={!selectMode && !canMove ? "You're not assigned to this task, so you can't move it" : undefined}
-          onClick={() => (selectMode ? (canMove && onToggleSelect(task.id)) : onClick(task))}
+                    onClick={() => (selectMode ? (canMove && onToggleSelect(task.id)) : onClick(task))}
         >
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
             {selectMode && (
@@ -133,6 +134,27 @@ export default function TaskCard({
                   ? task.assignees[0].name
                   : `${task.assignees.length} assignees`}
               </span>
+            </div>
+          )}
+          {!selectMode && canMove && task.status === 'todo' && (
+            <div className={styles.approvalActions} onClick={(e) => e.stopPropagation()}>
+              <button className={styles.acceptBtn} onClick={() => onMove(task.id, 'in_progress')}>
+                ▶ Accept task
+              </button>
+            </div>
+          )}
+          {!selectMode && canMove && task.status === 'in_progress' && (
+            <div className={styles.approvalActions} onClick={(e) => e.stopPropagation()}>
+              <button
+                className={styles.backBtn}
+                title="Changed your mind? Move it back to To Do"
+                onClick={() => onMove(task.id, 'todo')}
+              >
+                ↩ To Do
+              </button>
+              <button className={styles.submitBtn} onClick={() => onMove(task.id, 'review')}>
+                ✓ Submit for review
+              </button>
             </div>
           )}
           {canApprove && task.status === 'done' && (
