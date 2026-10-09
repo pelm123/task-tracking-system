@@ -373,3 +373,15 @@
   border-color: var(--color-accent);
   background: var(--color-surface);
 }
+
+/* Absolute due date line on a card (the countdown/overdue badge sits above it) */
+.dueDateLine {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.dueDateLineOverdue {
+  color: var(--priority-high);
+  font-weight: 600;
+}

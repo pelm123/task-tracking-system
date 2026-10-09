@@ -108,3 +108,20 @@ export function getDueCountdown(dueDate, now = new Date()) {
     urgent: !overdue && diffMs <= 24 * 60 * 60 * 1000,
   };
 }
+
+// Absolute due date for display next to (or instead of) the countdown, e.g.
+// "Thu, Oct 9 · 6:00 PM". The year is added only when it isn't the current
+// year, so most dates stay short. Uses the browser's local time, like the
+// date/time pickers do.
+export function formatDueDateShort(dueDate, now = new Date()) {
+  if (!dueDate) return '';
+  const d = new Date(dueDate);
+  const date = d.toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    ...(d.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {}),
+  });
+  const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  return `${date} · ${time}`;
+}

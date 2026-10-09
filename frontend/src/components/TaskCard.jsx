@@ -1,5 +1,5 @@
 import { Draggable } from '@hello-pangea/dnd';
-import { getDueCountdown, isOverdue, formatOverdueShort } from '../utils/dueDate';
+import { getDueCountdown, isOverdue, formatOverdueShort, formatDueDateShort } from '../utils/dueDate';
 import styles from '../pages/board.module.css';
 
 const PRIORITY_COLORS = {
@@ -93,6 +93,14 @@ export default function TaskCard({
               </span>
             )}
           </div>
+          {task.due_date && (
+            <p
+              className={`${styles.dueDateLine} ${overdue ? styles.dueDateLineOverdue : ''}`}
+              title={new Date(task.due_date).toLocaleString()}
+            >
+              📅 {formatDueDateShort(task.due_date, now)}
+            </p>
+          )}
           {task.assignees && task.assignees.length > 0 && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
               <div style={{ display: 'flex' }}>

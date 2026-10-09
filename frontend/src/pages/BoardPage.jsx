@@ -10,15 +10,8 @@ import { colorForProject } from '../utils/projectColor';
 import KanbanColumn from '../components/KanbanColumn';
 import NewTaskModal from '../components/NewTaskModal';
 import TaskDetailModal from '../components/TaskDetailModal';
+import TaskListView from '../components/TaskListView';
 import styles from './board.module.css';
-import tableStyles from './admin.module.css';
-
-const STATUS_LABELS = { todo: 'To Do', in_progress: 'In Progress', review: 'Review', done: 'Done' };
-
-function formatDate(dateStr) {
-  if (!dateStr) return '—';
-  return new Date(dateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-}
 
 const COLUMNS = [
   { status: 'todo', label: 'To Do' },
@@ -117,24 +110,24 @@ export default function BoardPage() {
     };
   }, [currentProjectId]);
 
-  async function handleDragEnd(result) {
-    const { source, destination, draggableId } = result;
-    if (!destination) return;
-    if (source.droppableId === destination.droppableId && source.index === destination.index) return;
-
-    const newStatus = destination.droppableId;
+  // The single place that decides whether a task may change status, shared by
+  // drag-and-drop and the list view's status dropdown so both follow the same
+  // rules (and the backend enforces them again).
+  async function moveTask(taskId, newStatus) {
+    const fromStatus = tasks.find((t) => t.id === taskId)?.status;
+    if (!fromStatus || fromStatus === newStatus) return;
 
     // A Done task can only leave Done through the reopen flow: PM/admin,
     // back to To Do, with a required comment (the backend enforces this
     // too). Nothing is moved optimistically here — the card just snaps
     // back unless the reopen actually goes through.
-    if (source.droppableId === 'done' && newStatus !== 'done') {
+    if (fromStatus === 'done' && newStatus !== 'done') {
       if (!canApprove) {
         setError('Only a PM or admin can reopen a Done task.');
       } else if (newStatus !== 'todo') {
         setError('A Done task can only be reopened to To Do, with a comment explaining why.');
       } else {
-        handleDeny(draggableId);
+        handleDeny(taskId);
       }
       return;
     }
@@ -150,7 +143,7 @@ export default function BoardPage() {
     // disabling the drag itself (see TaskCard), but checked again here in
     // case the task's assignee list changed after the board last loaded.
     if (!canApprove) {
-      const task = tasks.find((t) => t.id === draggableId);
+      const task = tasks.find((t) => t.id === taskId);
       const isAssignee = (task?.assignees || []).some((a) => a.id === user.id);
       if (!isAssignee) {
         setError('You can only move tasks you are assigned to.');
@@ -159,15 +152,22 @@ export default function BoardPage() {
     }
 
     setTasks((prev) =>
-      prev.map((t) => (t.id === draggableId ? { ...t, status: newStatus } : t))
+      prev.map((t) => (t.id === taskId ? { ...t, status: newStatus } : t))
     );
 
     try {
-      await tasksApi.updateTaskStatus(draggableId, newStatus);
+      await tasksApi.updateTaskStatus(taskId, newStatus);
     } catch (err) {
       setError(err.response?.data?.message || 'Could not save that move — reverting.');
       loadTasks();
     }
+  }
+
+  async function handleDragEnd(result) {
+    const { source, destination, draggableId } = result;
+    if (!destination) return;
+    if (source.droppableId === destination.droppableId && source.index === destination.index) return;
+    await moveTask(draggableId, destination.droppableId);
   }
 
   async function handleApprove(taskId) {
@@ -266,6 +266,11 @@ export default function BoardPage() {
     setSelectedIds((prev) =>
       prev.includes(taskId) ? prev.filter((id) => id !== taskId) : [...prev, taskId]
     );
+  }
+
+  // list view's header checkbox: replace the selection with the given ids
+  function setSelection(ids) {
+    setSelectedIds(ids);
   }
 
   function exitSelectMode() {
@@ -462,43 +467,21 @@ export default function BoardPage() {
       )}
 
       {view === 'list' ? (
-        <div className={tableStyles.tableWrap}>
-          <table className={tableStyles.table}>
-            <thead>
-              <tr>
-                <th>Title</th>
-                <th>Status</th>
-                <th>Priority</th>
-                <th>Assignee</th>
-                <th>Due date</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedTasks.map((t) => (
-                <tr key={t.id} onClick={() => setSelectedTask(t)} style={{ cursor: 'pointer' }}>
-                  <td>{t.title}</td>
-                  <td>
-                    <span className={tableStyles.badge}>{STATUS_LABELS[t.status]}</span>
-                  </td>
-                  <td className={tableStyles.muted}>{t.priority}</td>
-                  <td className={tableStyles.muted}>
-                    {t.assignees && t.assignees.length > 0
-                      ? t.assignees.map((a) => a.name).join(', ')
-                      : 'Unassigned'}
-                  </td>
-                  <td className={tableStyles.muted}>{formatDate(t.due_date)}</td>
-                </tr>
-              ))}
-              {filteredTasks.length === 0 && (
-                <tr>
-                  <td colSpan={5} className={tableStyles.muted} style={{ textAlign: 'center', padding: 24 }}>
-                    No tasks match your filters.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <TaskListView
+          tasks={sortedTasks}
+          now={now}
+          currentUser={user}
+          canApprove={canApprove}
+          selectMode={selectMode}
+          selectedIds={selectedIds}
+          onToggleSelect={toggleSelect}
+          onSelectAll={setSelection}
+          onOpen={setSelectedTask}
+          onStatusChange={moveTask}
+          onApprove={handleApprove}
+          onDeny={handleDeny}
+          onQuickAdd={handleQuickAdd}
+        />
       ) : (
         <DragDropContext onDragEnd={handleDragEnd}>
           <div className={styles.columns}>
