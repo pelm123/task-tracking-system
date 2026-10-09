@@ -13,7 +13,7 @@ async function register(req, res) {
   }
 
   try {
-    const existing = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
+    const existing = await pool.query('SELECT id FROM users WHERE LOWER(email) = LOWER($1)', [email.trim()]);
     if (existing.rows.length > 0) {
       return res.status(409).json({ message: 'Email already registered' });
     }
@@ -21,21 +21,18 @@ async function register(req, res) {
     const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
     const userRole = role === 'pm' ? 'pm' : 'member'; // "admin" can only be granted via the admin panel
 
-    const result = await pool.query(
-      `INSERT INTO users (name, email, password_hash, role)
-       VALUES ($1, $2, $3, $4)
-       RETURNING id, name, email, role, created_at`,
-      [name, email, passwordHash, userRole]
+    // Accounts start unapproved: no token is issued, and login is refused
+    // until an admin approves the account from the Admin page.
+    await pool.query(
+      `INSERT INTO users (name, email, password_hash, role, is_approved)
+       VALUES ($1, $2, $3, $4, FALSE)`,
+      [name.trim(), email.trim().toLowerCase(), passwordHash, userRole]
     );
 
-    const user = result.rows[0];
-    const token = jwt.sign(
-      { id: user.id, email: user.email, role: user.role },
-      process.env.JWT_SECRET,
-      { expiresIn: TOKEN_EXPIRY }
-    );
-
-    res.status(201).json({ user, token });
+    res.status(201).json({
+      pending: true,
+      message: 'Account created. Please wait for an admin to approve it before logging in.',
+    });
   } catch (err) {
     console.error('Register error:', err.message);
     res.status(500).json({ message: 'Internal server error' });
@@ -51,8 +48,8 @@ async function login(req, res) {
 
   try {
     const result = await pool.query(
-      'SELECT id, name, email, password_hash, role FROM users WHERE email = $1',
-      [email]
+      'SELECT id, name, email, password_hash, role, is_approved FROM users WHERE LOWER(email) = LOWER($1)',
+      [email.trim()]
     );
 
     if (result.rows.length === 0) {
@@ -64,6 +61,15 @@ async function login(req, res) {
 
     if (!passwordMatches) {
       return res.status(401).json({ message: 'Invalid email or password' });
+    }
+
+    // Checked only after the password matches, so this message can't be used
+    // to probe which emails have accounts.
+    if (!user.is_approved) {
+      return res.status(403).json({
+        code: 'PENDING_APPROVAL',
+        message: 'Your account is waiting for an admin to approve it. You can log in once it has been approved.',
+      });
     }
 
     const token = jwt.sign(
