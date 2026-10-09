@@ -4,11 +4,44 @@ const pool = require('../config/db');
 async function listUsers(req, res) {
   try {
     const result = await pool.query(
-      `SELECT id, name, email, role, created_at FROM users ORDER BY name ASC`
+      `SELECT id, name, email, role, created_at FROM users WHERE is_approved = TRUE ORDER BY name ASC`
     );
     res.json(result.rows);
   } catch (err) {
     console.error('List users error:', err.message);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+// GET /users/pending — admin only: sign-ups still waiting for approval
+async function listPendingUsers(req, res) {
+  try {
+    const result = await pool.query(
+      `SELECT id, name, email, role, created_at FROM users
+       WHERE is_approved = FALSE ORDER BY created_at ASC`
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('List pending users error:', err.message);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+// PATCH /users/:id/approve — admin only. (Rejecting a sign-up is the existing
+// DELETE /users/:id, which also frees the email to register again.)
+async function approveUser(req, res) {
+  try {
+    const result = await pool.query(
+      `UPDATE users SET is_approved = TRUE WHERE id = $1
+       RETURNING id, name, email, role, created_at`,
+      [req.params.id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Approve user error:', err.message);
     res.status(500).json({ message: 'Internal server error' });
   }
 }
@@ -54,4 +87,4 @@ async function deleteUser(req, res) {
   }
 }
 
-module.exports = { listUsers, updateUserRole, deleteUser };
+module.exports = { listUsers, listPendingUsers, approveUser, updateUserRole, deleteUser };

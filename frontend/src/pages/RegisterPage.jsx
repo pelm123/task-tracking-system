@@ -12,6 +12,7 @@ export default function RegisterPage() {
   const [role, setRole] = useState('member');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [submittedEmail, setSubmittedEmail] = useState(null); // set once the account is created
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -19,7 +20,7 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       await register(name, email, password, role);
-      navigate('/board');
+      setSubmittedEmail(email);
     } catch (err) {
       setError(err.response?.data?.message || 'Could not create your account. Try again.');
     } finally {
@@ -47,6 +48,22 @@ export default function RegisterPage() {
       </div>
 
       <div className={styles.formPanel}>
+      {submittedEmail ? (
+        <div className={styles.authCard}>
+          <div className={styles.pendingIcon}>⏳</div>
+          <h1>Waiting for approval</h1>
+          <p className="sub">
+            Your account for <strong>{submittedEmail}</strong> has been created. An admin needs to
+            approve it before you can log in.
+          </p>
+          <p className={styles.pendingNote}>
+            Try signing in again later. If it takes a while, let your admin know you've signed up.
+          </p>
+          <button type="button" className={styles.submitBtn} onClick={() => navigate('/login')}>
+            Back to sign in
+          </button>
+        </div>
+      ) : (
       <div className={styles.authCard}>
         <h1>Create your account</h1>
         <p className="sub">Set up access to the team's board.</p>
@@ -99,6 +116,7 @@ export default function RegisterPage() {
           Already have an account? <Link to="/login">Sign in</Link>
         </p>
       </div>
+      )}
       </div>
     </div>
   );

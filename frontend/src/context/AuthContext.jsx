@@ -17,12 +17,10 @@ export function AuthProvider({ children }) {
     return data.user;
   }, []);
 
+  // Sign-up no longer logs you in: the account has to be approved by an admin
+  // first, so there's no token or user to store here.
   const register = useCallback(async (name, email, password, role) => {
-    const data = await authApi.register({ name, email, password, role });
-    localStorage.setItem('token', data.token);
-    localStorage.setItem('user', JSON.stringify(data.user));
-    setUser(data.user);
-    return data.user;
+    return authApi.register({ name, email, password, role });
   }, []);
 
   const logout = useCallback(() => {

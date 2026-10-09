@@ -28,16 +28,24 @@ export default function AdminPage() {
   const [tab, setTab] = useState(isAdmin ? 'users' : 'tasks');
 
   const [users, setUsers] = useState([]);
+  const [pending, setPending] = useState([]); // sign-ups waiting for approval (admin only)
+  const [busyId, setBusyId] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [savedUserId, setSavedUserId] = useState(null);
 
   useEffect(() => {
-    Promise.all([usersApi.listUsers(), tasksApi.listTasks()])
-      .then(([u, t]) => {
+    Promise.all([
+      usersApi.listUsers(),
+      tasksApi.listTasks(),
+      isAdmin ? usersApi.listPendingUsers() : Promise.resolve([]),
+    ])
+      .then(([u, t, p]) => {
         setUsers(u);
         setTasks(t);
+        setPending(p);
+        if (p.length > 0) setTab('users'); // land on the approval queue first
       })
       .catch(() => setError('Could not load admin data.'))
       .finally(() => setLoading(false));
@@ -51,6 +59,41 @@ export default function AdminPage() {
       setTimeout(() => setSavedUserId((current) => (current === userId ? null : current)), 1500);
     } catch (err) {
       setError('Could not update role.');
+    }
+  }
+
+  async function handleApprove(person) {
+    setBusyId(person.id);
+    try {
+      const approved = await usersApi.approveUser(person.id);
+      setPending((prev) => prev.filter((p) => p.id !== person.id));
+      setUsers((prev) =>
+        [...prev, approved].sort((a, b) => a.name.localeCompare(b.name))
+      );
+      setError('');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Could not approve that account.');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function handleReject(person) {
+    if (
+      !window.confirm(
+        `Reject and remove the sign-up from ${person.name} (${person.email})? They can sign up again later.`
+      )
+    )
+      return;
+    setBusyId(person.id);
+    try {
+      await usersApi.deleteUser(person.id);
+      setPending((prev) => prev.filter((p) => p.id !== person.id));
+      setError('');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Could not reject that sign-up.');
+    } finally {
+      setBusyId(null);
     }
   }
 
@@ -98,6 +141,7 @@ export default function AdminPage() {
             onClick={() => setTab('users')}
           >
             Users <span className={styles.muted}>({users.length})</span>
+            {pending.length > 0 && <span className={styles.pendingBadge}>{pending.length} new</span>}
           </button>
         )}
         <button
@@ -107,6 +151,44 @@ export default function AdminPage() {
           Tasks <span className={styles.muted}>({tasks.length})</span>
         </button>
       </div>
+
+      {tab === 'users' && isAdmin && pending.length > 0 && (
+        <div className={styles.pendingBox}>
+          <p className={styles.pendingTitle}>
+            Waiting for approval ({pending.length})
+          </p>
+          <p className={styles.pendingHint}>
+            These people have signed up but can't log in until you approve them.
+          </p>
+          <div className={styles.pendingList}>
+            {pending.map((p) => (
+              <div key={p.id} className={styles.pendingRow}>
+                <span className={styles.avatar}>{initials(p.name)}</span>
+                <div className={styles.pendingWho}>
+                  <span className={styles.pendingName}>{p.name}</span>
+                  <span className={styles.muted}>
+                    {p.email} · asked for {p.role === 'pm' ? 'PM' : 'Member'} · {formatDate(p.created_at)}
+                  </span>
+                </div>
+                <button
+                  className="btn btn-danger"
+                  disabled={busyId === p.id}
+                  onClick={() => handleReject(p)}
+                >
+                  Reject
+                </button>
+                <button
+                  className="btn btn-primary"
+                  disabled={busyId === p.id}
+                  onClick={() => handleApprove(p)}
+                >
+                  {busyId === p.id ? 'Working…' : 'Approve'}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {tab === 'users' && isAdmin && (
         <div className={styles.tableWrap}>
