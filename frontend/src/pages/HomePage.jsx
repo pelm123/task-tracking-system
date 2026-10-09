@@ -439,7 +439,7 @@ export default function HomePage() {
                   const pct = total === 0 ? 0 : Math.round((done / total) * 100);
                   const color = colorForProject(project.id);
                   return (
-                    <div key={project.id} className={styles.projectItemWrap}>
+                    <div key={project.id} className={`${styles.projectItemWrap} ${canApprove ? styles.hasDelete : ''}`}>
                       <button
                         type="button"
                         className={styles.projectItem}
@@ -470,7 +470,7 @@ export default function HomePage() {
                           aria-label={`Delete "${project.name}"`}
                           onClick={() => setDeleteTarget({ project, total })}
                         >
-                          🗑
+                          <span aria-hidden="true">🗑</span> Delete
                         </button>
                       )}
                     </div>

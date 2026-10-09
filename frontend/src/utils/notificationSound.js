@@ -1,6 +1,5 @@
-// Notification sounds, synthesized with the Web Audio API — no audio files
-// to ship or host. Each notification type gets its own short, distinct
-// sound so you can tell what happened without looking.
+// Notification sound, synthesized with the Web Audio API — no audio files
+// to ship or host. A single chime is used for every notification type.
 //
 // Browsers block audio until the user has interacted with the page once, so
 // initNotificationSound() hooks the first click/keypress to unlock it.
@@ -68,69 +67,28 @@ function tone(c, { freq, start = 0, duration = 0.18, type = 'sine', volume = 0.1
 }
 
 // Note frequencies (Hz)
-const C4 = 261.63;
-const E4 = 329.63;
 const C5 = 523.25;
 const E5 = 659.25;
-const G5 = 783.99;
-const A5 = 880.0;
 
-const SOUNDS = {
-  // alarm: two-tone alternating "siren" — the most urgent sound in the set
-  overdue: (c) => {
-    [0, 0.3].forEach((s) => {
-      tone(c, { freq: A5, start: s, duration: 0.14, type: 'square', volume: 0.11 });
-      tone(c, { freq: E5, start: s + 0.15, duration: 0.14, type: 'square', volume: 0.11 });
-    });
-  },
-  // urgent: three quick, sharp beeps
-  due_soon: (c) => {
-    [0, 0.16, 0.32].forEach((s) => tone(c, { freq: A5, start: s, duration: 0.12, type: 'square', volume: 0.1 }));
-  },
-  // "you've been given something": rising two-note chime
-  assigned: (c) => {
-    tone(c, { freq: C5, start: 0, duration: 0.2 });
-    tone(c, { freq: E5, start: 0.15, duration: 0.3 });
-  },
-  // light, friendly pop
-  comment: (c) => {
-    tone(c, { freq: A5, duration: 0.14, volume: 0.14 });
-  },
-  // neutral two-note
-  status_change: (c) => {
-    tone(c, { freq: E5, start: 0, duration: 0.14 });
-    tone(c, { freq: G5, start: 0.12, duration: 0.18 });
-  },
-  // success: bright rising triad
-  approved: (c) => {
-    tone(c, { freq: C5, start: 0, duration: 0.16 });
-    tone(c, { freq: E5, start: 0.12, duration: 0.16 });
-    tone(c, { freq: G5, start: 0.24, duration: 0.34 });
-  },
-  // sent back: low, falling two-note
-  approval_denied: (c) => {
-    tone(c, { freq: E4, start: 0, duration: 0.22, type: 'triangle', volume: 0.22 });
-    tone(c, { freq: C4, start: 0.2, duration: 0.36, type: 'triangle', volume: 0.22 });
-  },
-  // minor edit: barely-there tick
-  task_updated: (c) => {
-    tone(c, { freq: G5, duration: 0.08, volume: 0.07 });
-  },
-};
-
-// When several notifications land in the same poll, only the most important
-// one makes a sound — a burst of five chimes at once is just noise.
-const PRIORITY = ['overdue', 'due_soon', 'approval_denied', 'assigned', 'approved', 'comment', 'status_change', 'task_updated'];
-
-export function pickMostImportantType(types) {
-  return PRIORITY.find((t) => types.includes(t)) || types[0];
+// One sound for every notification type — a soft rising two-note chime.
+// (Types are still told apart by color in the bell; the sound just says
+// "something new arrived".)
+function chime(c) {
+  tone(c, { freq: C5, start: 0, duration: 0.2 });
+  tone(c, { freq: E5, start: 0.15, duration: 0.3 });
 }
 
-export function playNotificationSound(type) {
+// Kept so callers don't change: when several notifications arrive together
+// the sound is only played once anyway.
+export function pickMostImportantType(types) {
+  return types[0];
+}
+
+export function playNotificationSound() {
   if (!isSoundEnabled()) return;
   const c = getContext();
   if (!c) return;
-  const play = SOUNDS[type] || SOUNDS.comment;
+  const play = chime;
   try {
     if (c.state === 'suspended') {
       // not unlocked yet (no user gesture) — resume() is a no-op/rejects
