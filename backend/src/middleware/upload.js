@@ -19,7 +19,11 @@ const storage = multer.diskStorage({
   },
 });
 
-const MAX_FILE_SIZE_MB = 20;
+// Any file type is accepted (ZIP archives, videos, documents, images, ...);
+// the size is the only limit. Default 200 MB so a typical video or archive
+// fits; override with UPLOAD_MAX_MB in the backend .env. If a reverse proxy
+// (nginx etc.) sits in front, its client_max_body_size must be at least this.
+const MAX_FILE_SIZE_MB = Number(process.env.UPLOAD_MAX_MB) || 200;
 
 const upload = multer({
   storage,
