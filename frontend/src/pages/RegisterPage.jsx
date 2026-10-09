@@ -1,10 +1,13 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useLang } from '../context/LanguageContext';
+import LanguageToggle from '../components/LanguageToggle';
 import styles from './auth.module.css';
 
 export default function RegisterPage() {
   const { register } = useAuth();
+  const { t } = useLang();
   const navigate = useNavigate();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -22,7 +25,7 @@ export default function RegisterPage() {
       await register(name, email, password, role);
       setSubmittedEmail(email);
     } catch (err) {
-      setError(err.response?.data?.message || 'Could not create your account. Try again.');
+      setError(err.response?.data?.message || t('auth.registerFail'));
     } finally {
       setLoading(false);
     }
@@ -30,8 +33,9 @@ export default function RegisterPage() {
 
   return (
     <div className={styles.authScreen}>
+      <LanguageToggle />
       <div className={styles.brandPanel}>
-        <span className={styles.brandMark}>Task Tracker</span>
+        <span className={styles.brandMark}>{t('auth.brand')}</span>
         <div className={styles.brandBody}>
           <div className={styles.brandBars}>
             <div className={styles.brandBar} style={{ height: '100%', background: 'var(--status-done)' }} />
@@ -39,43 +43,36 @@ export default function RegisterPage() {
             <div className={styles.brandBar} style={{ height: '70%', background: 'var(--status-in-progress)' }} />
             <div className={styles.brandBar} style={{ height: '45%', background: 'var(--status-todo)' }} />
           </div>
-          <h2 className={styles.brandHeadline}>Set up your account in a minute.</h2>
-          <p className={styles.brandSub}>
-            Join your team's project, pick up tasks, and get notified the moment something needs you.
-          </p>
+          <h2 className={styles.brandHeadline}>{t('auth.registerHeadline')}</h2>
+          <p className={styles.brandSub}>{t('auth.registerSub')}</p>
         </div>
-        <span className={styles.brandFoot}>To Do · In Progress · Review · Done</span>
+        <span className={styles.brandFoot}>{t('auth.footStatuses')}</span>
       </div>
 
       <div className={styles.formPanel}>
       {submittedEmail ? (
         <div className={styles.authCard}>
           <div className={styles.pendingIcon}>⏳</div>
-          <h1>Waiting for approval</h1>
-          <p className="sub">
-            Your account for <strong>{submittedEmail}</strong> has been created. An admin needs to
-            approve it before you can log in.
-          </p>
-          <p className={styles.pendingNote}>
-            Try signing in again later. If it takes a while, let your admin know you've signed up.
-          </p>
+          <h1>{t('auth.waitingTitle')}</h1>
+          <p className="sub">{t('auth.waitingBody', { email: submittedEmail })}</p>
+          <p className={styles.pendingNote}>{t('auth.waitingNote')}</p>
           <button type="button" className={styles.submitBtn} onClick={() => navigate('/login')}>
-            Back to sign in
+            {t('auth.backToSignIn')}
           </button>
         </div>
       ) : (
       <div className={styles.authCard}>
-        <h1>Create your account</h1>
-        <p className="sub">Set up access to the team's board.</p>
+        <h1>{t('auth.createYourAccount')}</h1>
+        <p className="sub">{t('auth.registerIntro')}</p>
 
         <form onSubmit={handleSubmit}>
           <div className={styles.field}>
-            <label htmlFor="name">Name</label>
+            <label htmlFor="name">{t('auth.name')}</label>
             <input id="name" value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
           </div>
 
           <div className={styles.field}>
-            <label htmlFor="email">Email</label>
+            <label htmlFor="email">{t('auth.email')}</label>
             <input
               id="email"
               type="email"
@@ -86,7 +83,7 @@ export default function RegisterPage() {
           </div>
 
           <div className={styles.field}>
-            <label htmlFor="password">Password</label>
+            <label htmlFor="password">{t('auth.password')}</label>
             <input
               id="password"
               type="password"
@@ -98,22 +95,22 @@ export default function RegisterPage() {
           </div>
 
           <div className={styles.field}>
-            <label htmlFor="role">Role</label>
+            <label htmlFor="role">{t('auth.role')}</label>
             <select id="role" value={role} onChange={(e) => setRole(e.target.value)}>
-              <option value="member">Team member</option>
-              <option value="pm">Project manager</option>
+              <option value="member">{t('auth.roleMember')}</option>
+              <option value="pm">{t('auth.rolePm')}</option>
             </select>
           </div>
 
           {error && <p className={styles.errorText}>{error}</p>}
 
           <button type="submit" className={styles.submitBtn} disabled={loading}>
-            {loading ? 'Creating account…' : 'Create account'}
+            {loading ? t('auth.creatingAccount') : t('auth.createAccount')}
           </button>
         </form>
 
         <p className={styles.switchLine}>
-          Already have an account? <Link to="/login">Sign in</Link>
+          {t('auth.haveAccount')} <Link to="/login">{t('auth.signIn')}</Link>
         </p>
       </div>
       )}

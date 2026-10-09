@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import { getDueCountdown, isOverdue, formatOverdueShort, formatDueDateShort } from '../utils/dueDate';
+import { t as tr, getLocale } from '../i18n';
 import styles from './taskListView.module.css';
 
-const STATUS_LABELS = { todo: 'To Do', in_progress: 'In Progress', review: 'Review', done: 'Done' };
 const STATUS_ORDER = { todo: 0, in_progress: 1, review: 2, done: 3 };
 const STATUS_COLORS = {
   todo: 'var(--status-todo)',
@@ -10,7 +10,6 @@ const STATUS_COLORS = {
   review: 'var(--status-review)',
   done: 'var(--status-done)',
 };
-const PRIORITY_LABELS = { low: 'Low', medium: 'Medium', high: 'High' };
 const PRIORITY_ORDER = { high: 0, medium: 1, low: 2 };
 const PRIORITY_COLORS = {
   low: 'var(--priority-low)',
@@ -104,30 +103,30 @@ export default function TaskListView({
                     checked={allSelected}
                     disabled={selectableIds.length === 0}
                     onChange={() => onSelectAll(allSelected ? [] : selectableIds)}
-                    title={allSelected ? 'Clear selection' : 'Select all you can change'}
-                    aria-label="Select all"
+                    title={allSelected ? tr('list.clearSelection') : tr('list.selectAllHint')}
+                    aria-label={tr('list.selectAll')}
                   />
                 </th>
               )}
               <th aria-sort={ariaSort('title')}>
                 <button className={styles.sortBtn} onClick={() => cycleSort('title')}>
-                  Title {sortIndicator('title')}
+                  {tr('list.title')} {sortIndicator('title')}
                 </button>
               </th>
               <th aria-sort={ariaSort('status')}>
                 <button className={styles.sortBtn} onClick={() => cycleSort('status')}>
-                  Status {sortIndicator('status')}
+                  {tr('list.status')} {sortIndicator('status')}
                 </button>
               </th>
               <th aria-sort={ariaSort('priority')}>
                 <button className={styles.sortBtn} onClick={() => cycleSort('priority')}>
-                  Priority {sortIndicator('priority')}
+                  {tr('list.priority')} {sortIndicator('priority')}
                 </button>
               </th>
-              <th>Assignees</th>
+              <th>{tr('list.assignees')}</th>
               <th aria-sort={ariaSort('due')}>
                 <button className={styles.sortBtn} onClick={() => cycleSort('due')}>
-                  Due {sortIndicator('due')}
+                  {tr('list.due')} {sortIndicator('due')}
                 </button>
               </th>
               {canApprove && <th className={styles.actionsCol}></th>}
@@ -137,7 +136,7 @@ export default function TaskListView({
             {rows.length === 0 && (
               <tr>
                 <td colSpan={colCount} className={styles.emptyRow}>
-                  No tasks match your filters.
+                  {tr('list.noMatch')}
                 </td>
               </tr>
             )}
@@ -152,7 +151,7 @@ export default function TaskListView({
                   key={t.id}
                   className={`${styles.row} ${overdue ? styles.rowOverdue : ''} ${selected ? styles.rowSelected : ''}`}
                   onClick={() => (selectMode ? movable && onToggleSelect(t.id) : onOpen(t))}
-                  title={selectMode && !movable ? "You're not assigned to this task, so you can't select it" : undefined}
+                  title={selectMode && !movable ? tr('list.notAssigned') : undefined}
                 >
                   {selectMode && (
                     <td className={styles.checkCol} onClick={(e) => e.stopPropagation()}>
@@ -161,7 +160,7 @@ export default function TaskListView({
                         checked={selected}
                         disabled={!movable}
                         onChange={() => onToggleSelect(t.id)}
-                        aria-label={`Select ${t.title}`}
+                        aria-label={tr('list.selectRow', { title: t.title })}
                       />
                     </td>
                   )}
@@ -170,7 +169,7 @@ export default function TaskListView({
                     <span className={styles.titleText}>{t.title}</span>
                     {overdue && (
                       <span className={styles.overdueBadge} title={countdown?.label}>
-                        Overdue · {formatOverdueShort(t.due_date, now)}
+                        {tr('home.overduePill', { text: formatOverdueShort(t.due_date, now) })}
                       </span>
                     )}
                   </td>
@@ -178,24 +177,24 @@ export default function TaskListView({
                   <td onClick={(e) => e.stopPropagation()}>
                     <span className={styles.statusCellInner}>
                       <span className={styles.statusBadge} style={{ '--status-color': STATUS_COLORS[t.status] }}>
-                        {STATUS_LABELS[t.status]}
+                        {tr(`status.${t.status}`)}
                       </span>
                       {!selectMode && movable && t.status === 'todo' && (
                         <button className={styles.acceptBtn} onClick={() => onStatusChange(t.id, 'in_progress')}>
-                          ▶ Accept
+                          {tr('list.accept')}
                         </button>
                       )}
                       {!selectMode && movable && t.status === 'in_progress' && (
                         <>
                           <button
                             className={styles.backBtn}
-                            title="Move back to To Do"
+                            title={tr('list.backHint')}
                             onClick={() => onStatusChange(t.id, 'todo')}
                           >
-                            ↩ To Do
+                            {tr('board.back')}
                           </button>
                           <button className={styles.submitBtn} onClick={() => onStatusChange(t.id, 'review')}>
-                            ✓ Submit for review
+                            {tr('board.submit')}
                           </button>
                         </>
                       )}
@@ -204,7 +203,7 @@ export default function TaskListView({
 
                   <td>
                     <span className={styles.priorityChip} style={{ '--chip-color': PRIORITY_COLORS[t.priority] }}>
-                      ⚑ {PRIORITY_LABELS[t.priority] || t.priority}
+                      ⚑ {tr(`priority.${t.priority}`)}
                     </span>
                   </td>
 
@@ -219,17 +218,17 @@ export default function TaskListView({
                           ))}
                         </span>
                         <span className={styles.assigneeNames}>
-                          {t.assignees.length === 1 ? t.assignees[0].name : `${t.assignees.length} assignees`}
+                          {t.assignees.length === 1 ? t.assignees[0].name : tr('board.assigneesN', { n: t.assignees.length })}
                         </span>
                       </span>
                     ) : (
-                      <span className={styles.muted}>Unassigned</span>
+                      <span className={styles.muted}>{tr('list.unassigned')}</span>
                     )}
                   </td>
 
                   <td>
                     {t.due_date ? (
-                      <div className={styles.dueCell} title={new Date(t.due_date).toLocaleString()}>
+                      <div className={styles.dueCell} title={new Date(t.due_date).toLocaleString(getLocale())}>
                         <span className={`${styles.dueDate} ${overdue ? styles.dueDateOverdue : ''}`}>
                           {formatDueDateShort(t.due_date, now)}
                         </span>
@@ -244,7 +243,7 @@ export default function TaskListView({
                         )}
                       </div>
                     ) : (
-                      <span className={styles.muted}>No due date</span>
+                      <span className={styles.muted}>{tr('home.noDueDate')}</span>
                     )}
                   </td>
 
@@ -253,16 +252,16 @@ export default function TaskListView({
                       {t.status === 'review' && (
                         <span className={styles.actionBtns}>
                           <button className={styles.approveBtn} onClick={() => onApprove(t.id)}>
-                            ✓ Approve
+                            {tr('home.approve')}
                           </button>
                           <button className={styles.denyBtn} onClick={() => onDeny(t.id)}>
-                            ✕ Deny
+                            {tr('home.deny')}
                           </button>
                         </span>
                       )}
                       {t.status === 'done' && (
                         <button className={styles.denyBtn} onClick={() => onDeny(t.id)}>
-                          ↩ Reopen
+                          {tr('board.reopen')}
                         </button>
                       )}
                     </td>

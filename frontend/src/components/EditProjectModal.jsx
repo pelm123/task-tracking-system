@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { colorForProject } from '../utils/projectColor';
+import { t } from '../i18n';
 import styles from './modal.module.css';
 
 const MAX_NAME_LENGTH = 500; // keep in sync with the backend / projects.name
@@ -20,7 +21,7 @@ export default function EditProjectModal({ project, onClose, onSave }) {
   async function handleSubmit(e) {
     e.preventDefault();
     if (!name.trim()) {
-      setError('Name is required');
+      setError(t('modal.nameRequired'));
       return;
     }
     setSaving(true);
@@ -33,7 +34,7 @@ export default function EditProjectModal({ project, onClose, onSave }) {
       });
       onClose();
     } catch (err) {
-      setError(err.response?.data?.message || 'Could not save the project');
+      setError(err.response?.data?.message || t('modal.saveProjectFail'));
       setSaving(false);
     }
   }
@@ -42,7 +43,7 @@ export default function EditProjectModal({ project, onClose, onSave }) {
     <div className={styles.overlay} onClick={onClose}>
       <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
         <div className={styles.modalHeader}>
-          <h2>Edit project</h2>
+          <h2>{t('modal.editProject')}</h2>
           <button className={styles.closeBtn} onClick={onClose}>
             ✕
           </button>
@@ -50,7 +51,7 @@ export default function EditProjectModal({ project, onClose, onSave }) {
 
         <form onSubmit={handleSubmit}>
           <div className={styles.field}>
-            <label htmlFor="epName">Name</label>
+            <label htmlFor="epName">{t('modal.name')}</label>
             <input
               id="epName"
               value={name}
@@ -61,24 +62,24 @@ export default function EditProjectModal({ project, onClose, onSave }) {
           </div>
 
           <div className={styles.field}>
-            <label htmlFor="epDescription">Description</label>
+            <label htmlFor="epDescription">{t('modal.description')}</label>
             <textarea
               id="epDescription"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Optional — what's this project for?"
+              placeholder={t('modal.projectDescPlaceholder')}
             />
           </div>
 
           <div className={styles.field}>
-            <label>Color</label>
+            <label>{t('modal.color')}</label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
               {SWATCHES.map((c) => (
                 <button
                   key={c}
                   type="button"
                   title={c}
-                  aria-label={`Use ${c}`}
+                  aria-label={t('modal.useColor', { color: c })}
                   onClick={() => setColor(c)}
                   style={{
                     width: 24,
@@ -96,7 +97,7 @@ export default function EditProjectModal({ project, onClose, onSave }) {
                 type="color"
                 value={/^#[0-9a-fA-F]{6}$/.test(color) ? color : '#4c8dff'}
                 onChange={(e) => setColor(e.target.value.toUpperCase())}
-                title="Pick any color"
+                title={t('modal.pickColor')}
                 style={{ width: 32, height: 28, padding: 0, border: 'none', background: 'none', cursor: 'pointer' }}
               />
             </div>
@@ -106,10 +107,10 @@ export default function EditProjectModal({ project, onClose, onSave }) {
 
           <div className={styles.formActions}>
             <button type="button" className={styles.btnGhost} onClick={onClose}>
-              Cancel
+              {t('common.cancel')}
             </button>
             <button type="submit" className={styles.btnPrimary} disabled={saving}>
-              {saving ? 'Saving…' : 'Save'}
+              {saving ? t('modal.saving') : t('common.save')}
             </button>
           </div>
         </form>

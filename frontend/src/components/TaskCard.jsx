@@ -1,5 +1,6 @@
 import { Draggable } from '@hello-pangea/dnd';
 import { getDueCountdown, isOverdue, formatOverdueShort, formatDueDateShort } from '../utils/dueDate';
+import { t, getLocale } from '../i18n';
 import styles from '../pages/board.module.css';
 
 const PRIORITY_COLORS = {
@@ -71,14 +72,14 @@ export default function TaskCard({
                 background: 'color-mix(in srgb, var(--color-text) 7%, transparent)',
               }}
             >
-              {task.priority}
+              {t(`priority.${task.priority}`)}
             </span>
             {overdue && (
               <span
                 className={styles.overdueBadge}
-                title={`${countdown.label} — due ${new Date(task.due_date).toLocaleString()}`}
+                title={t('board.overdueTitle', { label: countdown.label, date: new Date(task.due_date).toLocaleString(getLocale()) })}
               >
-                Overdue · {formatOverdueShort(task.due_date, now)}
+                {t('home.overduePill', { text: formatOverdueShort(task.due_date, now) })}
               </span>
             )}
             {countdown && !overdue && (
@@ -88,7 +89,7 @@ export default function TaskCard({
                   color: countdown.urgent && task.status !== 'done' ? 'var(--priority-medium)' : undefined,
                   fontWeight: countdown.urgent && task.status !== 'done' ? 600 : undefined,
                 }}
-                title={new Date(task.due_date).toLocaleString()}
+                title={new Date(task.due_date).toLocaleString(getLocale())}
               >
                 {countdown.label}
               </span>
@@ -97,7 +98,7 @@ export default function TaskCard({
           {task.due_date && (
             <p
               className={`${styles.dueDateLine} ${overdue ? styles.dueDateLineOverdue : ''}`}
-              title={new Date(task.due_date).toLocaleString()}
+              title={new Date(task.due_date).toLocaleString(getLocale())}
             >
               📅 {formatDueDateShort(task.due_date, now)}
             </p>
@@ -132,14 +133,14 @@ export default function TaskCard({
               <span style={{ fontSize: 12, color: 'var(--color-text-muted)' }}>
                 {task.assignees.length === 1
                   ? task.assignees[0].name
-                  : `${task.assignees.length} assignees`}
+                  : t('board.assigneesN', { n: task.assignees.length })}
               </span>
             </div>
           )}
           {!selectMode && canMove && task.status === 'todo' && (
             <div className={styles.approvalActions} onClick={(e) => e.stopPropagation()}>
               <button className={styles.acceptBtn} onClick={() => onMove(task.id, 'in_progress')}>
-                ▶ Accept task
+                {t('board.accept')}
               </button>
             </div>
           )}
@@ -147,20 +148,20 @@ export default function TaskCard({
             <div className={styles.approvalActions} onClick={(e) => e.stopPropagation()}>
               <button
                 className={styles.backBtn}
-                title="Changed your mind? Move it back to To Do"
+                title={t('board.backHint')}
                 onClick={() => onMove(task.id, 'todo')}
               >
-                ↩ To Do
+                {t('board.back')}
               </button>
               <button className={styles.submitBtn} onClick={() => onMove(task.id, 'review')}>
-                ✓ Submit for review
+                {t('board.submit')}
               </button>
             </div>
           )}
           {canApprove && task.status === 'done' && (
             <div className={styles.approvalActions} onClick={(e) => e.stopPropagation()}>
               <button className={styles.denyBtn} onClick={() => onDeny(task.id)}>
-                ↩ Reopen
+                {t('board.reopen')}
               </button>
             </div>
           )}
@@ -170,13 +171,13 @@ export default function TaskCard({
                 className={styles.approveBtn}
                 onClick={() => onApprove(task.id)}
               >
-                ✓ Approve
+                {t('home.approve')}
               </button>
               <button
                 className={styles.denyBtn}
                 onClick={() => onDeny(task.id)}
               >
-                ✕ Deny
+                {t('home.deny')}
               </button>
             </div>
           )}

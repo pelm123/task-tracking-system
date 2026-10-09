@@ -52,9 +52,15 @@ function lookup(dict, key) {
 
 // t('dates.dueIn', { text: '3d' }). Falls back to English, then to the key
 // itself, so a missing Thai string never renders blank.
+// Pass { count } to pick between `key_one` and `key_other` (plural forms).
 export function t(key, params) {
-  let str = lookup(DICTS[currentLang], key);
-  if (typeof str !== 'string') str = lookup(DICTS.en, key);
+  let k = key;
+  if (params && params.count != null) {
+    const plural = `${key}${Number(params.count) === 1 ? '_one' : '_other'}`;
+    if (typeof lookup(DICTS[currentLang], plural) === 'string' || typeof lookup(DICTS.en, plural) === 'string') k = plural;
+  }
+  let str = lookup(DICTS[currentLang], k);
+  if (typeof str !== 'string') str = lookup(DICTS.en, k);
   if (typeof str !== 'string') return key;
   if (params) {
     str = str.replace(/\{(\w+)\}/g, (m, name) => (params[name] != null ? String(params[name]) : m));

@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { t } from '../i18n';
 import styles from './modal.module.css';
 import {
   REMINDER_PRESETS,
@@ -32,7 +33,7 @@ export default function NewTaskModal({ users, onClose, onCreate }) {
     e.preventDefault();
     if (submittingRef.current) return;
     if (!title.trim()) {
-      setError('Title is required');
+      setError(t('modal.titleRequired'));
       return;
     }
     submittingRef.current = true;
@@ -49,7 +50,7 @@ export default function NewTaskModal({ users, onClose, onCreate }) {
       });
       onClose();
     } catch (err) {
-      setError(err.response?.data?.message || 'Could not create task');
+      setError(err.response?.data?.message || t('modal.createTaskFail'));
     } finally {
       submittingRef.current = false;
       setSaving(false);
@@ -60,7 +61,7 @@ export default function NewTaskModal({ users, onClose, onCreate }) {
     <div className={styles.overlay} onClick={onClose}>
       <div className={styles.modal} onClick={(e) => e.stopPropagation()}>
         <div className={styles.modalHeader}>
-          <h2>New task</h2>
+          <h2>{t('board.newTask')}</h2>
           <button className={styles.closeBtn} onClick={onClose}>
             ✕
           </button>
@@ -68,12 +69,12 @@ export default function NewTaskModal({ users, onClose, onCreate }) {
 
         <form onSubmit={handleSubmit}>
           <div className={styles.field}>
-            <label htmlFor="title">Title</label>
+            <label htmlFor="title">{t('modal.title')}</label>
             <input id="title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={500} autoFocus />
           </div>
 
           <div className={styles.field}>
-            <label htmlFor="description">Description</label>
+            <label htmlFor="description">{t('modal.description')}</label>
             <textarea
               id="description"
               value={description}
@@ -83,16 +84,16 @@ export default function NewTaskModal({ users, onClose, onCreate }) {
 
           <div className={styles.row}>
             <div className={styles.field}>
-              <label htmlFor="priority">Priority</label>
+              <label htmlFor="priority">{t('list.priority')}</label>
               <select id="priority" value={priority} onChange={(e) => setPriority(e.target.value)}>
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
+                <option value="low">{t('priority.low')}</option>
+                <option value="medium">{t('priority.medium')}</option>
+                <option value="high">{t('priority.high')}</option>
               </select>
             </div>
 
             <div className={styles.field}>
-              <label htmlFor="dueDate">Due date</label>
+              <label htmlFor="dueDate">{t('modal.dueDate')}</label>
               <input
                 id="dueDate"
                 type="date"
@@ -103,7 +104,7 @@ export default function NewTaskModal({ users, onClose, onCreate }) {
 
             {dueDate && (
               <div className={styles.field}>
-                <label htmlFor="dueTime">Due time</label>
+                <label htmlFor="dueTime">{t('modal.dueTime')}</label>
                 <input
                   id="dueTime"
                   type="time"
@@ -116,7 +117,7 @@ export default function NewTaskModal({ users, onClose, onCreate }) {
 
           {dueDate && (
             <div className={styles.field}>
-              <label htmlFor="reminderHours">Remind me</label>
+              <label htmlFor="reminderHours">{t('modal.remindMe')}</label>
               <select
                 id="reminderHours"
                 value={reminderHours}
@@ -133,10 +134,11 @@ export default function NewTaskModal({ users, onClose, onCreate }) {
 
           <div className={styles.field}>
             <label>
-              Assign to{assigneeIds.length > 0 && ` (${assigneeIds.length} selected)`}
+              {t('modal.assignTo')}
+              {assigneeIds.length > 0 && ` (${t('board.selected', { n: assigneeIds.length })})`}
             </label>
             <div className={styles.assigneeList}>
-              {users.length === 0 && <p className={styles.emptyText}>No users available.</p>}
+              {users.length === 0 && <p className={styles.emptyText}>{t('modal.noUsers')}</p>}
               {users.map((u) => (
                 <label key={u.id} className={styles.assigneeRow}>
                   <input
@@ -145,7 +147,7 @@ export default function NewTaskModal({ users, onClose, onCreate }) {
                     onChange={() => toggleAssignee(u.id)}
                   />
                   <span className={styles.assigneeName}>
-                    {u.name} <span className={styles.assigneeRole}>({u.role})</span>
+                    {u.name} <span className={styles.assigneeRole}>({t(`roles.${u.role}`)})</span>
                   </span>
                 </label>
               ))}
@@ -156,10 +158,10 @@ export default function NewTaskModal({ users, onClose, onCreate }) {
 
           <div className={styles.formActions}>
             <button type="button" className={styles.btnGhost} onClick={onClose}>
-              Cancel
+              {t('common.cancel')}
             </button>
             <button type="submit" className={styles.btnPrimary} disabled={saving}>
-              {saving ? 'Creating…' : 'Create task'}
+              {saving ? t('modal.creating') : t('modal.createTask')}
             </button>
           </div>
         </form>

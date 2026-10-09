@@ -1,10 +1,13 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useLang } from '../context/LanguageContext';
+import LanguageToggle from '../components/LanguageToggle';
 import styles from './auth.module.css';
 
 export default function LoginPage() {
   const { login } = useAuth();
+  const { t } = useLang();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -17,9 +20,9 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await login(email, password);
-      navigate('/board');
+      navigate('/home');
     } catch (err) {
-      setError(err.response?.data?.message || 'Could not sign in. Check your details and try again.');
+      setError(err.response?.data?.message || t('auth.loginFail'));
     } finally {
       setLoading(false);
     }
@@ -27,8 +30,9 @@ export default function LoginPage() {
 
   return (
     <div className={styles.authScreen}>
+      <LanguageToggle />
       <div className={styles.brandPanel}>
-        <span className={styles.brandMark}>Task Tracker</span>
+        <span className={styles.brandMark}>{t('auth.brand')}</span>
         <div className={styles.brandBody}>
           <div className={styles.brandBars}>
             <div className={styles.brandBar} style={{ height: '45%', background: 'var(--status-todo)' }} />
@@ -36,22 +40,20 @@ export default function LoginPage() {
             <div className={styles.brandBar} style={{ height: '55%', background: 'var(--status-review)' }} />
             <div className={styles.brandBar} style={{ height: '100%', background: 'var(--status-done)' }} />
           </div>
-          <h2 className={styles.brandHeadline}>Everything your team is working on, in one board.</h2>
-          <p className={styles.brandSub}>
-            Tasks, due dates, comments, and who's doing what — kept in sync across your whole team.
-          </p>
+          <h2 className={styles.brandHeadline}>{t('auth.loginHeadline')}</h2>
+          <p className={styles.brandSub}>{t('auth.loginSub')}</p>
         </div>
-        <span className={styles.brandFoot}>To Do · In Progress · Review · Done</span>
+        <span className={styles.brandFoot}>{t('auth.footStatuses')}</span>
       </div>
 
       <div className={styles.formPanel}>
         <div className={styles.authCard}>
-          <h1>Welcome back</h1>
-          <p className="sub">Sign in to see what's on your board.</p>
+          <h1>{t('auth.welcomeBack')}</h1>
+          <p className="sub">{t('auth.loginIntro')}</p>
 
           <form onSubmit={handleSubmit}>
             <div className={styles.field}>
-              <label htmlFor="email">Email</label>
+              <label htmlFor="email">{t('auth.email')}</label>
               <input
                 id="email"
                 type="email"
@@ -63,7 +65,7 @@ export default function LoginPage() {
             </div>
 
             <div className={styles.field}>
-              <label htmlFor="password">Password</label>
+              <label htmlFor="password">{t('auth.password')}</label>
               <input
                 id="password"
                 type="password"
@@ -76,12 +78,12 @@ export default function LoginPage() {
             {error && <p className={styles.errorText}>{error}</p>}
 
             <button type="submit" className={styles.submitBtn} disabled={loading}>
-              {loading ? 'Signing in…' : 'Sign in'}
+              {loading ? t('auth.signingIn') : t('auth.signIn')}
             </button>
           </form>
 
           <p className={styles.switchLine}>
-            New here? <Link to="/register">Create an account</Link>
+            {t('auth.newHere')} <Link to="/register">{t('auth.createAccountLink')}</Link>
           </p>
         </div>
       </div>

@@ -1,6 +1,7 @@
 import { Droppable } from '@hello-pangea/dnd';
 import TaskCard from './TaskCard';
 import { isOverdue } from '../utils/dueDate';
+import { t } from '../i18n';
 import styles from '../pages/board.module.css';
 
 const STATUS_COLORS = {
@@ -39,7 +40,7 @@ export default function KanbanColumn({
           {label}
         </div>
         <span className={styles.columnHeaderRight}>
-          {overdueCount > 0 && <span className={styles.overdueCount}>⚠ {overdueCount} overdue</span>}
+          {overdueCount > 0 && <span className={styles.overdueCount}>⚠ {t('board.overdueCount', { n: overdueCount })}</span>}
           <span className={styles.count}>{tasks.length}</span>
         </span>
       </div>
@@ -53,9 +54,7 @@ export default function KanbanColumn({
           >
             {tasks.length === 0 && !snapshot.isDraggingOver && (
               <div className={styles.emptyColumn}>
-                {status === 'review' && !canApprove
-                  ? 'No tasks awaiting approval'
-                  : 'No tasks here yet'}
+                {status === 'review' && !canApprove ? t('board.emptyReview') : t('board.emptyColumn')}
               </div>
             )}
             {tasks.map((task, index) => (
