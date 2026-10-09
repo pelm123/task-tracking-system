@@ -142,3 +142,17 @@ CREATE TABLE notifications (
 );
 
 CREATE INDEX idx_notifications_user_unread ON notifications(user_id, is_read);
+
+-- ── Instant notification push (see migrations/015_notification_push.sql) ──
+CREATE OR REPLACE FUNCTION notify_new_notification()
+RETURNS TRIGGER AS $$
+BEGIN
+    PERFORM pg_notify('new_notification', NEW.user_id::text);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_notifications_push
+    AFTER INSERT ON notifications
+    FOR EACH ROW
+    EXECUTE FUNCTION notify_new_notification();

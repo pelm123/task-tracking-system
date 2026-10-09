@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import * as notificationsApi from '../api/notifications';
+import socket from '../api/socket';
 import {
   initNotificationSound,
   isSoundEnabled,
@@ -10,6 +11,8 @@ import {
 import styles from './notificationBell.module.css';
 import { notificationMeta } from '../utils/notificationTypes';
 
+// New notifications arrive instantly over the socket (see below); this slow
+// poll is only a safety net in case the live connection is down.
 const POLL_INTERVAL_MS = 30000;
 
 function timeAgo(dateStr) {
@@ -62,7 +65,29 @@ export default function NotificationBell() {
   useEffect(() => {
     load();
     const interval = setInterval(load, POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
+    // browsers throttle timers in background tabs, so check straight away
+    // when the tab becomes visible again
+    function handleVisible() {
+      if (document.visibilityState === 'visible') load();
+    }
+    document.addEventListener('visibilitychange', handleVisible);
+
+    // Instant path: the server pushes "notification:new" the moment one is
+    // created. (Re)join our private room on every (re)connect, then refresh.
+    function joinUserRoom() {
+      const token = localStorage.getItem('token');
+      if (token) socket.emit('join-user', token);
+    }
+    if (socket.connected) joinUserRoom();
+    socket.on('connect', joinUserRoom);
+    socket.on('notification:new', load);
+
+    return () => {
+      socket.off('connect', joinUserRoom);
+      socket.off('notification:new', load);
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisible);
+    };
   }, [load]);
 
   useEffect(() => {
