@@ -445,12 +445,15 @@ export default function BoardPage() {
             <option value="" disabled>
               Add assignee…
             </option>
-            <option value="__clear__">Clear all assignees</option>
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name}
-              </option>
-            ))}
+            {canApprove && <option value="__clear__">Clear all assignees</option>}
+            {/* members can only bring in fellow members, and can't clear assignees */}
+            {users
+              .filter((u) => canApprove || u.role === 'member')
+              .map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name}
+                </option>
+              ))}
           </select>
           <button className="btn btn-danger" onClick={handleBulkDelete}>
             Delete selected
