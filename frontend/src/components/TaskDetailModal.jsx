@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import * as commentsApi from '../api/comments';
 import * as attachmentsApi from '../api/attachments';
+import * as tasksApi from '../api/tasks';
 import {
   REMINDER_PRESETS,
   DEFAULT_REMINDER_HOURS,
@@ -10,6 +11,7 @@ import {
   toTimeInputValue,
   dateInputToDueTimestamp,
 } from '../utils/dueDate';
+import { formatDateTime } from '../utils/dateTime';
 import styles from './modal.module.css';
 
 function timeAgo(dateStr) {
@@ -21,6 +23,17 @@ function timeAgo(dateStr) {
   if (hours < 24) return `${hours}h ago`;
   return `${Math.floor(hours / 24)}d ago`;
 }
+
+const ACTIVITY_LABELS = {
+  created: 'created this task',
+  edited: 'edited the task',
+  status: 'changed the status',
+  approved: 'approved the task',
+  denied: 'sent the task back',
+  reopened: 'reopened the task',
+  attachment_added: 'attached a file',
+  attachment_removed: 'removed a file',
+};
 
 const MAX_UPLOAD_MB = 200; // keep in sync with backend middleware/upload.js (UPLOAD_MAX_MB)
 const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
@@ -97,6 +110,7 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
   const [editDraft, setEditDraft] = useState('');
 
   const [attachments, setAttachments] = useState([]);
+  const [activity, setActivity] = useState([]);
   const [uploading, setUploading] = useState(false);
   const [pendingFile, setPendingFile] = useState(null); // chosen but not yet saved
   const [preview, setPreview] = useState(null); // { url, mimeType, name }
@@ -110,6 +124,18 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
       if (preview) window.URL.revokeObjectURL(preview.url);
     };
   }, [preview]);
+
+  function loadActivity() {
+    tasksApi
+      .listTaskActivity(task.id)
+      .then(setActivity)
+      .catch(() => {}); // the log is informational — never block the modal on it
+  }
+
+  // Edits made by anyone (real-time sync bumps updated_at) refresh the log.
+  useEffect(() => {
+    loadActivity();
+  }, [task.updated_at]);
 
   // Only (re)load comments/attachments when switching to a different task —
   // NOT on every task.updated_at change. That used to also be a dependency
@@ -128,6 +154,7 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
       .then(setComments)
       .finally(() => setLoadingComments(false));
     attachmentsApi.listAttachments(task.id).then(setAttachments);
+    loadActivity();
     setPendingFile(null); // a staged file belongs to the task it was chosen on
     if (fileInputRef.current) fileInputRef.current.value = '';
   }, [task.id]);
@@ -207,7 +234,7 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
     if (!content) return;
     try {
       const updated = await commentsApi.updateComment(commentId, content);
-      setComments((prev) => prev.map((c) => (c.id === commentId ? { ...c, content: updated.content } : c)));
+      setComments((prev) => prev.map((c) => (c.id === commentId ? { ...c, content: updated.content, updated_at: updated.updated_at } : c)));
       setEditingCommentId(null);
     } catch (err) {
       setError('Could not save comment edit');
@@ -247,8 +274,9 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
     setUploading(true);
     try {
       const created = await attachmentsApi.uploadAttachment(task.id, pendingFile);
-      setAttachments((prev) => [created, ...prev]);
+      setAttachments((prev) => [{ ...created, uploader_name: created.uploader_name || currentUser.name }, ...prev]);
       setPendingFile(null);
+      loadActivity();
     } catch (err) {
       // Keep the staged file so the user can retry or cancel.
       setError(err.response?.data?.message || 'Could not upload file');
@@ -305,6 +333,7 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
     try {
       await attachmentsApi.deleteAttachment(att.id);
       setAttachments((prev) => prev.filter((a) => a.id !== att.id));
+      loadActivity();
     } catch (err) {
       setError(err.response?.data?.message || 'Could not delete file');
     }
@@ -522,9 +551,18 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
               {comments.map((c) => (
                 <div key={c.id} className={styles.commentItem}>
                   <div className={styles.commentMeta}>
-                    <span>{c.author_name}</span>
+                    <span>
+                      {c.author_name}
+                      <span className={styles.stamp} title={new Date(c.created_at).toLocaleString()}>
+                        {formatDateTime(c.created_at)} · {timeAgo(c.created_at)}
+                      </span>
+                      {c.updated_at && (
+                        <span className={styles.editedStamp} title={new Date(c.updated_at).toLocaleString()}>
+                          edited {formatDateTime(c.updated_at)} by {c.author_name}
+                        </span>
+                      )}
+                    </span>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      {timeAgo(c.created_at)}
                       {c.user_id === currentUser.id && editingCommentId !== c.id && (
                         <>
                           <button
@@ -615,6 +653,9 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
                       )}
                       {a.file_name}
                     </button>
+                    <span className={styles.attachStamp} title={new Date(a.created_at).toLocaleString()}>
+                      {a.uploader_name ? `Added by ${a.uploader_name}` : 'Added'} · {formatDateTime(a.created_at)}
+                    </span>
                     <span style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <span style={{ color: 'var(--color-text-muted)' }}>
                         {(a.file_size / 1024).toFixed(0)} KB
@@ -688,6 +729,25 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
                 </div>
               )}
             </>
+          )}
+        </div>
+
+        <div className={styles.section}>
+          <p className={styles.sectionTitle}>Activity</p>
+          {activity.length === 0 ? (
+            <p className={styles.emptyText}>No activity recorded yet.</p>
+          ) : (
+            <ul className={styles.activityList}>
+              {activity.map((a) => (
+                <li key={a.id} className={styles.activityItem}>
+                  <span className={styles.activityWhen}>{formatDateTime(a.created_at)}</span>
+                  <span className={styles.activityText}>
+                    <strong>{a.user_name || 'Someone'}</strong> {ACTIVITY_LABELS[a.action] || a.action}
+                    {a.detail ? <span className={styles.activityDetail}>{a.detail}</span> : null}
+                  </span>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
       </div>

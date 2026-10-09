@@ -1,5 +1,6 @@
 const pool = require('../config/db');
 const { notifyLineIfLinked } = require('../config/line');
+const { logActivity } = require('../config/activity');
 
 const VALID_STATUSES = ['todo', 'in_progress', 'review', 'done'];
 const VALID_PRIORITIES = ['low', 'medium', 'high'];
@@ -213,6 +214,7 @@ async function createTask(req, res) {
     const taskId = result.rows[0].id;
     const newlyAssigned = await setTaskAssignees(taskId, assignee_ids);
     const task = await getEnrichedTask(taskId);
+    await logActivity(taskId, req.user.id, 'created', null);
     await notifyAssignees(task, newlyAssigned, req.user.id);
     broadcastTask(req, task.project_id, 'task:upserted', task);
 
@@ -386,6 +388,12 @@ async function updateTask(req, res) {
       changedFields.push('reminder time updated');
     }
 
+    let assigneesBefore = null;
+    if (assignee_ids !== undefined) {
+      const cur = await pool.query('SELECT user_id FROM task_assignees WHERE task_id = $1', [req.params.id]);
+      assigneesBefore = cur.rows.map((r) => r.user_id);
+    }
+
     await pool.query(
       `UPDATE tasks SET
          title = COALESCE($1, title),
@@ -406,6 +414,14 @@ async function updateTask(req, res) {
     }
 
     const task = await getEnrichedTask(req.params.id);
+
+    const activityParts = [...changedFields];
+    if (assigneesBefore && !sameIdSet(assigneesBefore, assignee_ids)) {
+      activityParts.push(`assignees → ${task.assignees.map((a) => a.name).join(', ') || 'none'}`);
+    }
+    if (activityParts.length > 0) {
+      await logActivity(task.id, req.user.id, 'edited', activityParts.join('; '));
+    }
 
     if (newlyAssigned.length > 0) {
       await notifyAssignees(task, newlyAssigned, req.user.id);
@@ -506,6 +522,12 @@ async function updateTaskStatus(req, res) {
     );
 
     const task = await getEnrichedTask(req.params.id);
+    await logActivity(
+      task.id,
+      req.user.id,
+      'status',
+      `${STATUS_LABELS[previousStatus]} → ${STATUS_LABELS[status]}`
+    );
 
     if (task.assignees.length > 0) {
       const actorName = await getUserName(req.user.id);
@@ -547,6 +569,7 @@ async function approveTask(req, res) {
       [req.params.id]
     );
     const task = await getEnrichedTask(req.params.id);
+    await logActivity(task.id, req.user.id, 'approved', 'Review → Done');
 
     const actorName = await getUserName(req.user.id);
     const message = `${actorName} approved "${task.title}" — moved to Done`;
@@ -611,6 +634,12 @@ async function denyTask(req, res) {
     );
 
     const task = await getEnrichedTask(req.params.id);
+    await logActivity(
+      task.id,
+      req.user.id,
+      isReopen ? 'reopened' : 'denied',
+      `${isReopen ? 'Done' : 'Review'} → To Do: ${trimmedReason}`
+    );
 
     const actorName = await getUserName(req.user.id);
     const reasonLabel = isReopen ? 'reopened' : 'approval denied';
@@ -653,6 +682,25 @@ async function deleteTask(req, res) {
     res.status(204).send();
   } catch (err) {
     console.error('Delete task error:', err.message);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+// GET /tasks/:id/activity — who changed what, and when (newest first)
+async function listTaskActivity(req, res) {
+  try {
+    const result = await pool.query(
+      `SELECT a.id, a.action, a.detail, a.created_at, a.user_id, u.name AS user_name
+       FROM task_activity a
+       LEFT JOIN users u ON u.id = a.user_id
+       WHERE a.task_id = $1
+       ORDER BY a.created_at DESC
+       LIMIT 200`,
+      [req.params.id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('List activity error:', err.message);
     res.status(500).json({ message: 'Internal server error' });
   }
 }
@@ -733,6 +781,7 @@ async function bulkUpdateStatus(req, res) {
     );
     const updated = await Promise.all(result.rows.map((r) => getEnrichedTask(r.id)));
     for (const task of updated) {
+      await logActivity(task.id, req.user.id, 'status', `→ ${STATUS_LABELS[status]}`);
       broadcastTask(req, task.project_id, 'task:upserted', task);
     }
     res.json(updated);
@@ -856,4 +905,5 @@ module.exports = {
   bulkUpdateStatus,
   bulkAssign,
   bulkDelete,
+  listTaskActivity,
 };

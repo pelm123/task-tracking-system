@@ -97,10 +97,24 @@ CREATE TABLE comments (
     task_id    UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
     user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     content    TEXT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- set when the author edits the comment; NULL = never edited
+    updated_at TIMESTAMPTZ
 );
 
 CREATE INDEX idx_comments_task ON comments(task_id);
+
+-- ── Task activity log (who changed what, and when) ──────────
+CREATE TABLE task_activity (
+    id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    task_id    UUID NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+    user_id    UUID REFERENCES users(id) ON DELETE SET NULL,
+    action     VARCHAR(40) NOT NULL,
+    detail     TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_task_activity_task ON task_activity(task_id, created_at DESC);
 
 -- ── Attachments ─────────────────────────────────────────────
 CREATE TABLE attachments (

@@ -2,15 +2,18 @@ const path = require('path');
 const fs = require('fs');
 const pool = require('../config/db');
 const { UPLOAD_DIR } = require('../middleware/upload');
+const { logActivity } = require('../config/activity');
 
 // GET /tasks/:taskId/attachments
 async function listAttachments(req, res) {
   try {
     const result = await pool.query(
-      `SELECT id, file_name, file_size, mime_type, uploaded_by, created_at
-       FROM attachments
-       WHERE task_id = $1
-       ORDER BY created_at DESC`,
+      `SELECT a.id, a.file_name, a.file_size, a.mime_type, a.uploaded_by, a.created_at,
+              u.name AS uploader_name
+       FROM attachments a
+       LEFT JOIN users u ON u.id = a.uploaded_by
+       WHERE a.task_id = $1
+       ORDER BY a.created_at DESC`,
       [req.params.taskId]
     );
     res.json(result.rows);
@@ -74,7 +77,7 @@ async function uploadAttachment(req, res) {
     const result = await pool.query(
       `INSERT INTO attachments (task_id, uploaded_by, file_name, file_path, file_size, mime_type)
        VALUES ($1, $2, $3, $4, $5, $6)
-       RETURNING id, file_name, file_size, mime_type, created_at`,
+       RETURNING id, file_name, file_size, mime_type, uploaded_by, created_at`,
       [
         req.params.taskId,
         req.user.id,
@@ -85,7 +88,10 @@ async function uploadAttachment(req, res) {
       ]
     );
 
-    res.status(201).json(result.rows[0]);
+    const uploader = await pool.query('SELECT name FROM users WHERE id = $1', [req.user.id]);
+    await logActivity(req.params.taskId, req.user.id, 'attachment_added', result.rows[0].file_name);
+
+    res.status(201).json({ ...result.rows[0], uploader_name: uploader.rows[0]?.name || null });
   } catch (err) {
     console.error('Upload attachment error:', err.message);
     res.status(500).json({ message: 'Internal server error' });
@@ -197,7 +203,7 @@ async function previewAttachment(req, res) {
 async function deleteAttachment(req, res) {
   try {
     const existing = await pool.query(
-      `SELECT a.file_path, a.task_id, a.uploaded_by, t.created_by
+      `SELECT a.file_path, a.file_name, a.task_id, a.uploaded_by, t.created_by
        FROM attachments a
        JOIN tasks t ON t.id = a.task_id
        WHERE a.id = $1`,
@@ -206,7 +212,7 @@ async function deleteAttachment(req, res) {
     if (existing.rows.length === 0) {
       return res.status(404).json({ message: 'Attachment not found' });
     }
-    const { file_path, task_id, uploaded_by, created_by } = existing.rows[0];
+    const { file_path, file_name, task_id, uploaded_by, created_by } = existing.rows[0];
 
     if (req.user.role === 'member') {
       const isUploader = uploaded_by === req.user.id;
@@ -227,6 +233,7 @@ async function deleteAttachment(req, res) {
     }
 
     await pool.query('DELETE FROM attachments WHERE id = $1', [req.params.id]);
+    await logActivity(task_id, req.user.id, 'attachment_removed', file_name);
 
     const fullPath = path.join(UPLOAD_DIR, file_path);
     if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
