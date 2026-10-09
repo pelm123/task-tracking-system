@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import styles from './modal.module.css';
 import {
   REMINDER_PRESETS,
@@ -17,6 +17,10 @@ export default function NewTaskModal({ users, onClose, onCreate }) {
   const [assigneeIds, setAssigneeIds] = useState([]);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  // `saving` is state, so it isn't updated until the next render — two quick
+  // submits (double-click, or Enter then click) can both get through. A ref
+  // flips immediately and blocks the second one.
+  const submittingRef = useRef(false);
 
   function toggleAssignee(userId) {
     setAssigneeIds((prev) =>
@@ -26,10 +30,12 @@ export default function NewTaskModal({ users, onClose, onCreate }) {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    if (submittingRef.current) return;
     if (!title.trim()) {
       setError('Title is required');
       return;
     }
+    submittingRef.current = true;
     setSaving(true);
     setError('');
     try {
@@ -45,6 +51,7 @@ export default function NewTaskModal({ users, onClose, onCreate }) {
     } catch (err) {
       setError(err.response?.data?.message || 'Could not create task');
     } finally {
+      submittingRef.current = false;
       setSaving(false);
     }
   }

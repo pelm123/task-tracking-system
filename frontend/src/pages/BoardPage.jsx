@@ -27,6 +27,16 @@ const COLUMNS = [
   { status: 'done', label: 'Done' },
 ];
 
+// Insert-or-replace by id. The server broadcasts "task:upserted" to EVERYONE
+// in the project room — including the person who just created the task — and
+// that event can land before or after the create request's own response.
+// Whichever arrives second must replace the card, never add another one.
+function upsertTaskInList(list, task) {
+  return list.some((t) => t.id === task.id)
+    ? list.map((t) => (t.id === task.id ? task : t))
+    : [task, ...list];
+}
+
 export default function BoardPage() {
   const { currentProjectId, currentProject } = useProject();
   const { user } = useAuth();
@@ -88,10 +98,7 @@ export default function BoardPage() {
 
     function handleUpserted(task) {
       if (task.project_id !== currentProjectId) return;
-      setTasks((prev) => {
-        const exists = prev.some((t) => t.id === task.id);
-        return exists ? prev.map((t) => (t.id === task.id ? task : t)) : [task, ...prev];
-      });
+      setTasks((prev) => upsertTaskInList(prev, task));
       setSelectedTask((prev) => (prev && prev.id === task.id ? task : prev));
     }
 
@@ -204,7 +211,7 @@ export default function BoardPage() {
         await tasksApi.updateTaskStatus(created.id, status);
         created.status = status;
       }
-      setTasks((prev) => [created, ...prev]);
+      setTasks((prev) => upsertTaskInList(prev, created));
     } catch (err) {
       setError('Could not create the task.');
     }
@@ -212,7 +219,7 @@ export default function BoardPage() {
 
   async function handleCreateFromModal(payload) {
     const created = await tasksApi.createTask({ ...payload, project_id: currentProjectId });
-    setTasks((prev) => [created, ...prev]);
+    setTasks((prev) => upsertTaskInList(prev, created));
   }
 
   async function handleUpdateTask(id, payload) {
