@@ -19,3 +19,7 @@ export function updateUserRole(id, role) {
 export function deleteUser(id) {
   return client.delete(`/users/${id}`);
 }
+
+export function resetUserPassword(id, newPassword) {
+  return client.patch(`/users/${id}/password`, { newPassword });
+}
