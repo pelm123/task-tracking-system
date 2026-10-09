@@ -131,3 +131,26 @@
   color: var(--color-text-muted);
   font-style: italic;
 }
+
+/* Color-coding: each notification type sets --n-color (see utils/notificationTypes.js) */
+.item {
+  border-left: 3px solid var(--n-color, transparent);
+}
+
+.itemUnread {
+  background: color-mix(in srgb, var(--n-color, var(--color-accent)) 12%, transparent);
+}
+
+.typeTag {
+  display: inline-block;
+  margin-right: 7px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--n-color) 20%, transparent);
+  color: var(--n-color);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  vertical-align: 1px;
+}

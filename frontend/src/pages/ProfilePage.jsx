@@ -11,6 +11,7 @@ const NOTIFICATION_TYPE_LABELS = [
   { key: 'status_change', label: "A task you're on changes status" },
   { key: 'comment', label: 'Someone comments on your task' },
   { key: 'due_soon', label: 'A task is due soon (your reminder setting)' },
+  { key: 'overdue', label: 'A task goes overdue' },
   { key: 'approved', label: 'Your task is approved' },
   { key: 'approval_denied', label: 'Your task is sent back for changes' },
 ];

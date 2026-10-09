@@ -28,7 +28,7 @@ async function getLinkCode(req, res) {
   }
 }
 
-const NOTIFICATION_TYPES = ['assigned', 'status_change', 'comment', 'due_soon', 'approved', 'approval_denied'];
+const NOTIFICATION_TYPES = ['assigned', 'status_change', 'comment', 'due_soon', 'approved', 'approval_denied', 'overdue'];
 
 // GET /line/preferences — which notification types currently push to LINE
 // for this user (independent of whether they're actually linked yet)

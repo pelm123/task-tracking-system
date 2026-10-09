@@ -11,7 +11,7 @@ CREATE TYPE task_priority AS ENUM ('low', 'medium', 'high');
 -- 'task_updated' (general edits: title/description/priority/due date/
 -- reminder) is deliberately left out of line_notification_prefs below —
 -- it's in-app only and never pushed to LINE.
-CREATE TYPE notification_type AS ENUM ('due_soon', 'assigned', 'comment', 'status_change', 'approved', 'approval_denied', 'task_updated');
+CREATE TYPE notification_type AS ENUM ('due_soon', 'assigned', 'comment', 'status_change', 'approved', 'approval_denied', 'task_updated', 'overdue');
 
 -- ── Users ───────────────────────────────────────────────────
 CREATE TABLE users (
@@ -25,7 +25,9 @@ CREATE TABLE users (
     -- which notification_type values push to LINE once an account is
     -- linked; all on by default (see ProfilePage's "LINE notifications")
     line_notification_prefs JSONB NOT NULL DEFAULT
-      '{"assigned": true, "status_change": true, "comment": true, "due_soon": true, "approved": true, "approval_denied": true}'::jsonb,
+      '{"assigned": true, "status_change": true, "comment": true, "due_soon": true, "approved": true, "approval_denied": true, "overdue": true}'::jsonb,
+    -- new sign-ups are inserted as FALSE and can't log in until an admin approves
+    is_approved   BOOLEAN NOT NULL DEFAULT TRUE,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
