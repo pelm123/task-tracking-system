@@ -314,8 +314,10 @@
   text-align: right;
 }
 
-.rowActions .btn + .btn {
-  margin-left: 6px;
+/* the buttons use the app-wide .btn class, so it has to be :global here — a
+   plain .btn in a CSS module is renamed and never matched */
+.rowActions :global(.btn) + :global(.btn) {
+  margin-left: 8px;
 }
 
 .titleCell {
