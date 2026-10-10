@@ -1,3 +1,25 @@
+x-backend-env: &backend-env
+  PORT: 4000
+  DB_HOST: db
+  DB_PORT: 5432
+  POSTGRES_DB: ${POSTGRES_DB:-task_tracker}
+  POSTGRES_USER: ${POSTGRES_USER:-app}
+  POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+  JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is not set - copy .env.example to .env and fill it in (openssl rand -hex 32)}
+  TZ: Asia/Bangkok
+
+x-backend: &backend
+  build:
+    context: ./backend
+    args:
+      NPM_REGISTRY: ${NPM_REGISTRY:-}
+  image: task-tracker-backend
+  restart: unless-stopped
+  depends_on:
+    db:
+      condition: service_healthy
+  environment: *backend-env
+
 services:
   db:
     image: postgres:16
@@ -7,6 +29,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-task_tracker}
       POSTGRES_USER: ${POSTGRES_USER:-app}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      TZ: Asia/Bangkok
     ports:
       - "5432:5432"
     volumes:
@@ -18,5 +41,46 @@ services:
       timeout: 5s
       retries: 10
 
+  # ── Backend: three services built from one image (backend/), sharing the DB ──
+  auth:
+    <<: *backend
+    command: ["node", "src/services/auth.js"]
+
+  tasks:
+    <<: *backend
+    command: ["node", "src/services/tasks.js"]
+    environment:
+      <<: *backend-env
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-}
+      UPLOAD_MAX_MB: ${UPLOAD_MAX_MB:-200}
+    volumes:
+      - uploads_data:/app/uploads
+
+  notifications:
+    <<: *backend
+    command: ["node", "src/services/notifications.js"]
+    environment:
+      <<: *backend-env
+      LINE_CHANNEL_ACCESS_TOKEN: ${LINE_CHANNEL_ACCESS_TOKEN:-}
+      LINE_CHANNEL_SECRET: ${LINE_CHANNEL_SECRET:-}
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NPM_REGISTRY: ${NPM_REGISTRY:-}
+    restart: unless-stopped
+    depends_on:
+      auth:
+        condition: service_healthy
+      tasks:
+        condition: service_healthy
+      notifications:
+        condition: service_healthy
+    ports:
+      - "${WEB_PORT:-8080}:80"
+
 volumes:
   db_data:
+  uploads_data:

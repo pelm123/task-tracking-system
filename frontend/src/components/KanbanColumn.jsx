@@ -25,6 +25,7 @@ export default function KanbanColumn({
   onMove,
   currentUser,
   now,
+  riskById,
 }) {
   const overdueCount = tasks.filter((t) => isOverdue(t.due_date, t.status, now)).length;
 
@@ -72,6 +73,7 @@ export default function KanbanColumn({
                 onMove={onMove}
                 currentUser={currentUser}
                 now={now}
+                risk={riskById?.[task.id]}
               />
             ))}
             {provided.placeholder}

@@ -533,5 +533,29 @@
     "reminder": "reminder time updated",
     "assignees": "assignees → {value}",
     "nobody": "none"
+  },
+  "risk": {
+    "title": "At-risk tasks",
+    "subtitle": "Rule-based due-date risk, based on time left, status, workload and past task durations.",
+    "empty": "No at-risk tasks right now.",
+    "level": { "high": "High risk", "medium": "Medium risk", "low": "Low risk" },
+    "badge": "Risk: {level}",
+    "detailTitle": "Why this task is at risk",
+    "aiAsk": "Ask AI to explain",
+    "aiThinking": "Asking AI…",
+    "aiFail": "The AI is unavailable right now (free models are often busy). Please try again later.",
+    "aiLabel": "AI-generated explanation — may be inaccurate. Only task status, dates and counts were sent, no titles or names.",
+    "basedOn": "Typical task length: {days} days (from {n} finished tasks)",
+    "basedOnDefault": "Typical task length assumed: {days} days (too few finished tasks)",
+    "reason": {
+      "overdue": "Overdue by about {days} day(s)",
+      "timeTight": "Needs about {days} days of work but only {hours} h left",
+      "timeGettingTight": "Time is getting tight ({hours} h left)",
+      "notStarted": "Not started, due in {hours} h",
+      "overloaded": "Assignee has {n} open tasks",
+      "busy": "Assignee has {n} open tasks",
+      "unassigned": "No assignee, due soon",
+      "highPriority": "High priority"
+    }
   }
 }

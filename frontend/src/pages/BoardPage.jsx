@@ -74,6 +74,21 @@ export default function BoardPage() {
     }
   }, [currentProjectId]);
 
+  // due-date risk per open task. Reloaded when tasks change (debounced), since
+  // moving or editing a task changes its score and its assignee's workload
+  const [riskById, setRiskById] = useState({});
+  const riskKey = tasks.map((x) => `${x.id}:${x.status}:${x.due_date}:${(x.assignees || []).length}`).join('|');
+  useEffect(() => {
+    if (!currentProjectId) return undefined;
+    const timer = setTimeout(() => {
+      tasksApi
+        .getTaskRisk(currentProjectId)
+        .then((d) => setRiskById(Object.fromEntries(d.items.map((i) => [i.id, i]))))
+        .catch(() => {});
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [currentProjectId, riskKey]);
+
   useEffect(() => {
     loadTasks();
     usersApi.listUsers().then(setUsers).catch(() => {});
@@ -463,6 +478,7 @@ export default function BoardPage() {
         <TaskListView
           tasks={sortedTasks}
           now={now}
+          riskById={riskById}
           currentUser={user}
           canApprove={canApprove}
           selectMode={selectMode}
@@ -493,6 +509,7 @@ export default function BoardPage() {
                 onMove={moveTask}
                 currentUser={user}
                 now={now}
+                riskById={riskById}
               />
             ))}
           </div>

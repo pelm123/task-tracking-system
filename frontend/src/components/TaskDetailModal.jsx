@@ -14,6 +14,7 @@ import {
 import { formatDateTime, timeAgo } from '../utils/dateTime';
 import { t, getLocale } from '../i18n';
 import styles from './modal.module.css';
+import TaskRiskSection from './TaskRiskSection';
 
 const MAX_UPLOAD_MB = 200; // keep in sync with backend middleware/upload.js (UPLOAD_MAX_MB)
 const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024;
@@ -573,6 +574,10 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
             </button>
           )}
         </div>
+
+        {task.status !== 'done' && (
+          <TaskRiskSection taskId={task.id} status={task.status} dueDate={task.due_date} />
+        )}
 
         <div className={styles.section}>
           <p className={styles.sectionTitle}>{t('detail.comments')}</p>
