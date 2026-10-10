@@ -10,6 +10,7 @@ import NewTaskModal from '../components/NewTaskModal';
 import NewProjectModal from '../components/NewProjectModal';
 import EditProjectModal from '../components/EditProjectModal';
 import ConfirmDialog from '../components/ConfirmDialog';
+import ProjectSwitcher from '../components/ProjectSwitcher';
 import { isOverdue } from '../utils/dueDate';
 import { formatDateTime } from '../utils/dateTime';
 import { t as tr, getLocale } from '../i18n';
@@ -145,14 +146,6 @@ export default function AdminPage() {
       return true;
     });
   }, [users, userSearch, roleFilter]);
-
-  const projectOptions = useMemo(() => {
-    const seen = new Map();
-    tasks.forEach((t) => {
-      if (t.project_id && !seen.has(t.project_id)) seen.set(t.project_id, t.project_name);
-    });
-    return [...seen.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name));
-  }, [tasks]);
 
   const filteredTasks = useMemo(() => {
     const q = taskSearch.trim().toLowerCase();
@@ -711,14 +704,11 @@ export default function AdminPage() {
               value={taskSearch}
               onChange={(e) => setTaskSearch(e.target.value)}
             />
-            <select value={projectFilter} onChange={(e) => setProjectFilter(e.target.value)}>
-              <option value="">{tr('calendar.allProjects')}</option>
-              {projectOptions.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+            <ProjectSwitcher
+              value={projectFilter}
+              onChange={setProjectFilter}
+              allOption={{ value: '', label: tr('calendar.allProjects') }}
+            />
             <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
               <option value="">{tr('admin.allStatuses')}</option>
               {STATUS_KEYS.map((value) => (
@@ -827,8 +817,8 @@ export default function AdminPage() {
                   </th>
                   <th>{tr('modal.title')}</th>
                   <th>{tr('admin.colProject')}</th>
-                  <th>{tr('list.status')}</th>
-                  <th>{tr('list.priority')}</th>
+                  <th className={styles.nowrap}>{tr('list.status')}</th>
+                  <th className={styles.nowrap}>{tr('list.priority')}</th>
                   <th>{tr('admin.colAssignee')}</th>
                   <th>{tr('admin.colCreatedBy')}</th>
                   <th>{tr('list.due')}</th>
@@ -864,12 +854,12 @@ export default function AdminPage() {
                         <span className={styles.projectDotSm} style={{ background: colorForProject(t.project_id) }} />
                         {t.project_name}
                       </td>
-                      <td>
+                      <td className={styles.nowrap}>
                         <span className={styles.badge} style={{ color: STATUS_COLORS[t.status] }}>
                           {tr(`status.${t.status}`)}
                         </span>
                       </td>
-                      <td className={styles.muted}>{tr(`priority.${t.priority}`)}</td>
+                      <td className={`${styles.muted} ${styles.nowrap}`}>{tr(`priority.${t.priority}`)}</td>
                       <td className={styles.muted}>
                         {t.assignees && t.assignees.length > 0
                           ? t.assignees.map((a) => a.name).join(', ')
