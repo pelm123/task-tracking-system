@@ -79,6 +79,8 @@
 
 .table th {
   text-align: left;
+  vertical-align: middle;
+  white-space: nowrap;
   color: var(--color-text-muted);
   font-weight: 600;
   text-transform: uppercase;
@@ -94,8 +96,10 @@
   vertical-align: middle;
 }
 
-/* short columns (status, priority) stay on one line, even for Thai labels */
-.table .nowrap {
+/* short columns (status, priority, dates, counts): centred heading and
+   value, kept on one line even for Thai labels */
+.table .center {
+  text-align: center;
   white-space: nowrap;
 }
 

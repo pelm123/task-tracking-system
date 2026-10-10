@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import * as usersApi from '../api/users';
 import * as tasksApi from '../api/tasks';
@@ -11,6 +12,8 @@ import NewProjectModal from '../components/NewProjectModal';
 import EditProjectModal from '../components/EditProjectModal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ProjectSwitcher from '../components/ProjectSwitcher';
+import PasswordRequirements from '../components/PasswordRequirements';
+import { isPasswordValid } from '../utils/passwordPolicy';
 import { isOverdue } from '../utils/dueDate';
 import { formatDateTime } from '../utils/dateTime';
 import { t as tr, getLocale } from '../i18n';
@@ -44,7 +47,14 @@ export default function AdminPage() {
   const { user: currentUser } = useAuth();
   const { projects, refresh: refreshProjects } = useProject();
   const isAdmin = currentUser.role === 'admin';
-  const [tab, setTab] = useState(isAdmin ? 'users' : 'tasks');
+  // The open tab lives in the URL (?tab=tasks) so it survives the remount that
+  // happens when the language is switched, a refresh, and the Back button.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const tab = ['projects', 'tasks'].includes(tabParam) || (tabParam === 'users' && isAdmin)
+    ? tabParam
+    : isAdmin ? 'users' : 'tasks';
+  const setTab = (next) => setSearchParams({ tab: next }, { replace: true });
 
   const [users, setUsers] = useState([]);
   const [pending, setPending] = useState([]); // sign-ups waiting for approval (admin only)
@@ -99,7 +109,8 @@ export default function AdminPage() {
         setUsers(u);
         setTasks(t);
         setPending(p);
-        if (p.length > 0) setTab('users'); // land on the approval queue first
+        // land on the approval queue first, unless a tab was already chosen
+        if (p.length > 0 && !tabParam) setTab('users');
       })
       .catch(() => setError(tr('admin.loadFail')))
       .finally(() => setLoading(false));
@@ -362,8 +373,8 @@ export default function AdminPage() {
 
   async function handleResetPassword(e) {
     e.preventDefault();
-    if (resetPassword.length < 6) {
-      setResetError(tr('admin.pwMin'));
+    if (!isPasswordValid(resetPassword, resetTarget)) {
+      setResetError(tr('password.notStrong'));
       return;
     }
     setResetBusy(true);
@@ -541,9 +552,9 @@ export default function AdminPage() {
                 <tr>
                   <th>{tr('auth.name')}</th>
                   <th>{tr('auth.email')}</th>
-                  <th>{tr('auth.role')}</th>
-                  <th>{tr('admin.openTasks')}</th>
-                  <th>{tr('admin.joined')}</th>
+                  <th className={styles.center}>{tr('auth.role')}</th>
+                  <th className={styles.center}>{tr('admin.openTasks')}</th>
+                  <th className={styles.center}>{tr('admin.joined')}</th>
                   <th></th>
                 </tr>
               </thead>
@@ -568,7 +579,7 @@ export default function AdminPage() {
                         </div>
                       </td>
                       <td className={styles.muted}>{u.email}</td>
-                      <td>
+                      <td className={styles.center}>
                         <select
                           className={styles.roleSelect}
                           value={u.role}
@@ -584,7 +595,7 @@ export default function AdminPage() {
                           <span style={{ marginLeft: 8, color: 'var(--status-done)', fontSize: 12 }}>{tr('admin.savedTick')}</span>
                         )}
                       </td>
-                      <td className={styles.muted}>
+                      <td className={`${styles.muted} ${styles.center}`}>
                         {load ? (
                           <>
                             {load.open}
@@ -594,7 +605,7 @@ export default function AdminPage() {
                           '—'
                         )}
                       </td>
-                      <td className={styles.muted}>{formatDate(u.created_at)}</td>
+                      <td className={`${styles.muted} ${styles.center}`}>{formatDate(u.created_at)}</td>
                       <td className={styles.rowActions}>
                         <button className="btn btn-secondary" onClick={() => openReset(u)}>
                           {tr('admin.resetPassword')}
@@ -632,9 +643,9 @@ export default function AdminPage() {
                 <tr>
                   <th>{tr('admin.colProject')}</th>
                   <th>{tr('admin.progress')}</th>
-                  <th>{tr('admin.tabTasks')}</th>
-                  <th>{tr('home.statOverdue')}</th>
-                  <th>{tr('admin.colCreated')}</th>
+                  <th className={styles.center}>{tr('admin.tabTasks')}</th>
+                  <th className={styles.center}>{tr('home.statOverdue')}</th>
+                  <th className={styles.center}>{tr('admin.colCreated')}</th>
                   <th></th>
                 </tr>
               </thead>
@@ -669,11 +680,11 @@ export default function AdminPage() {
                           {tr('home.doneOf', { done: stats.done, total: stats.total })} · {pct}%
                         </span>
                       </td>
-                      <td className={styles.muted}>{stats.total}</td>
-                      <td className={stats.overdue > 0 ? styles.overdueText : styles.muted}>
+                      <td className={`${styles.muted} ${styles.center}`}>{stats.total}</td>
+                      <td className={`${stats.overdue > 0 ? styles.overdueText : styles.muted} ${styles.center}`}>
                         {stats.overdue > 0 ? stats.overdue : '—'}
                       </td>
-                      <td className={styles.muted}>{formatDate(p.created_at)}</td>
+                      <td className={`${styles.muted} ${styles.center}`}>{formatDate(p.created_at)}</td>
                       <td className={styles.rowActions}>
                         <button className="btn btn-secondary" onClick={() => viewProjectTasks(p.id)}>
                           {tr('admin.viewTasks')}
@@ -817,11 +828,11 @@ export default function AdminPage() {
                   </th>
                   <th>{tr('modal.title')}</th>
                   <th>{tr('admin.colProject')}</th>
-                  <th className={styles.nowrap}>{tr('list.status')}</th>
-                  <th className={styles.nowrap}>{tr('list.priority')}</th>
+                  <th className={styles.center}>{tr('list.status')}</th>
+                  <th className={styles.center}>{tr('list.priority')}</th>
                   <th>{tr('admin.colAssignee')}</th>
                   <th>{tr('admin.colCreatedBy')}</th>
-                  <th>{tr('list.due')}</th>
+                  <th className={styles.center}>{tr('list.due')}</th>
                   <th></th>
                 </tr>
               </thead>
@@ -854,19 +865,19 @@ export default function AdminPage() {
                         <span className={styles.projectDotSm} style={{ background: colorForProject(t.project_id) }} />
                         {t.project_name}
                       </td>
-                      <td className={styles.nowrap}>
+                      <td className={styles.center}>
                         <span className={styles.badge} style={{ color: STATUS_COLORS[t.status] }}>
                           {tr(`status.${t.status}`)}
                         </span>
                       </td>
-                      <td className={`${styles.muted} ${styles.nowrap}`}>{tr(`priority.${t.priority}`)}</td>
+                      <td className={`${styles.muted} ${styles.center}`}>{tr(`priority.${t.priority}`)}</td>
                       <td className={styles.muted}>
                         {t.assignees && t.assignees.length > 0
                           ? t.assignees.map((a) => a.name).join(', ')
                           : tr('list.unassigned')}
                       </td>
                       <td className={styles.muted}>{t.creator_name}</td>
-                      <td className={late ? styles.overdueText : styles.muted}>
+                      <td className={`${late ? styles.overdueText : styles.muted} ${styles.center}`}>
                         {formatDate(t.due_date)}
                         {late && ` · ${tr('admin.overdueLower')}`}
                       </td>
@@ -1024,12 +1035,15 @@ export default function AdminPage() {
                 autoFocus
               />
             </label>
+            {resetPassword && (
+              <PasswordRequirements password={resetPassword} email={resetTarget.email} name={resetTarget.name} />
+            )}
             {resetError && <p className={styles.dialogError}>{resetError}</p>}
             <div className={styles.dialogActions}>
               <button type="button" className="btn btn-ghost" onClick={() => setResetTarget(null)} disabled={resetBusy}>
                 {tr('common.cancel')}
               </button>
-              <button type="submit" className="btn btn-primary" disabled={resetBusy || resetPassword.length < 6}>
+              <button type="submit" className="btn btn-primary" disabled={resetBusy || !isPasswordValid(resetPassword, resetTarget)}>
                 {resetBusy ? tr('modal.saving') : tr('admin.setPassword')}
               </button>
             </div>
