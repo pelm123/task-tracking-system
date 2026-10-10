@@ -19,6 +19,7 @@ import styles from './dashboard.module.css';
 import { colorForProject } from '../utils/projectColor';
 import { timeAgo } from '../utils/dateTime';
 import { t as tr, getLocale } from '../i18n';
+import AtRiskPanel from '../components/AtRiskPanel';
 
 const STATUS_COLORS = {
   todo: '#8b9490',
@@ -525,6 +526,8 @@ export default function DashboardPage() {
                 <div className={styles.statLabel}>{tr('dashboard.overdueNow')}</div>
               </div>
             </div>
+
+            <AtRiskPanel />
 
             <PeriodSection title={tr('dashboard.selectedPeriod')} subtitle={formatRangeLabel(range.from, range.to)} data={overview.period} />
           </>

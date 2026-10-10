@@ -1,5 +1,4 @@
 const pool = require('./db');
-const { notifyLineIfLinked } = require('./line');
 const { forLang, normalizeLang } = require('./i18n');
 
 // Looks up each person's language in one query.
@@ -29,14 +28,13 @@ async function getUserLanguage(userId) {
 async function notify(userId, { taskId, type, emoji, build, lang }) {
   const L = forLang(lang || (await getUserLanguage(userId)));
   const message = build(L);
+  // `line_emoji` marks the row for LINE delivery; the Notification service
+  // picks it up via the line_outbox trigger (migration 017)
   await pool.query(
-    `INSERT INTO notifications (user_id, task_id, type, message)
-     VALUES ($1, $2, $3, $4)`,
-    [userId, taskId, type, message]
+    `INSERT INTO notifications (user_id, task_id, type, message, line_emoji)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [userId, taskId, type, message, emoji || null]
   );
-  if (emoji) {
-    notifyLineIfLinked(userId, `${emoji} ${message}`, type); // not awaited — LINE must never slow a request
-  }
 }
 
 // Same, for several people at once (languages fetched in a single query).

@@ -1,8 +1,13 @@
-.toggle {
+.bar {
   position: fixed;
   top: 16px;
   right: 16px;
   z-index: 50;
+  display: flex;
+  gap: 8px;
+}
+
+.toggle {
   display: inline-flex;
   align-items: center;
   gap: 6px;

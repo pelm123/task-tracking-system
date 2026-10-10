@@ -4,8 +4,6 @@ const http = require('http');
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
-const { Server } = require('socket.io');
-const jwt = require('jsonwebtoken');
 
 const healthRoutes = require('./routes/health.routes');
 const authRoutes = require('./routes/auth.routes');
@@ -21,6 +19,8 @@ const lineRoutes = require('./routes/line.routes');
 const { handleWebhook } = require('./controllers/line.controller');
 const { startDueDateScheduler } = require('./jobs/dueDateCheck');
 const { startNotificationPush } = require('./config/notificationPush');
+const { startLineDelivery } = require('./config/lineDelivery');
+const { attachRealtime } = require('./config/realtime');
 const localize = require('./middleware/localize');
 
 const app = express();
@@ -62,39 +62,12 @@ app.get('/', (req, res) => {
 // (4000) instead of needing one of its own. Controllers reach `io` via
 // req.app.get('io') so they can broadcast after a DB write succeeds.
 const server = http.createServer(app);
-const io = new Server(server, {
-  cors: { origin: true }, // reflect the request's origin — works whether the
-  // app is opened over LAN, through the Vite dev proxy, or through an ngrok
-  // tunnel, without having to hardcode a frontend URL here
-});
+const io = attachRealtime(server);
 app.set('io', io);
-
-io.on('connection', (socket) => {
-  // each browser tab joins a room named after the project it's currently
-  // viewing, so a task change only broadcasts to people looking at that
-  // same project — not every connected client across every project
-  socket.on('join-project', (projectId) => {
-    if (projectId) socket.join(`project:${projectId}`);
-  });
-  socket.on('leave-project', (projectId) => {
-    if (projectId) socket.leave(`project:${projectId}`);
-  });
-
-  // each logged-in tab also joins a private room for its user, so a new
-  // notification can be pushed instantly. The JWT is verified so nobody can
-  // listen on someone else's room.
-  socket.on('join-user', (token) => {
-    try {
-      const payload = jwt.verify(token, process.env.JWT_SECRET);
-      if (payload?.id) socket.join(`user:${payload.id}`);
-    } catch (err) {
-      // bad/expired token — simply not joined; polling still works
-    }
-  });
-});
 
 server.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
   startDueDateScheduler();
   startNotificationPush(io);
+  startLineDelivery();
 });

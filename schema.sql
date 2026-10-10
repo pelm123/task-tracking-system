@@ -28,7 +28,7 @@ CREATE TABLE users (
       '{"assigned": true, "status_change": true, "comment": true, "due_soon": true, "approved": true, "approval_denied": true, "overdue": true}'::jsonb,
     -- new sign-ups are inserted as FALSE and can't log in until an admin approves
     is_approved   BOOLEAN NOT NULL DEFAULT TRUE,
-    -- interface language; notifications and LINE messages are written in it
+    -- UI / notification language (migration 016)
     language      VARCHAR(2) NOT NULL DEFAULT 'th' CHECK (language IN ('th', 'en')),
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -139,6 +139,7 @@ CREATE TABLE notifications (
     task_id    UUID REFERENCES tasks(id) ON DELETE CASCADE,
     type       notification_type NOT NULL,
     message    TEXT NOT NULL,
+    line_emoji TEXT,   -- set => also push to LINE (migration 017)
     is_read    BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -158,3 +159,20 @@ CREATE TRIGGER trg_notifications_push
     AFTER INSERT ON notifications
     FOR EACH ROW
     EXECUTE FUNCTION notify_new_notification();
+
+-- ── LINE delivery outbox (see migrations/017_line_outbox.sql) ──
+CREATE OR REPLACE FUNCTION notify_line_outbox()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.line_emoji IS NOT NULL THEN
+        PERFORM pg_notify('line_outbox', NEW.id::text);
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_notifications_line_outbox ON notifications;
+CREATE TRIGGER trg_notifications_line_outbox
+    AFTER INSERT ON notifications
+    FOR EACH ROW
+    EXECUTE FUNCTION notify_line_outbox();

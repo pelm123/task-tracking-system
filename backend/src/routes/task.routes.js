@@ -13,6 +13,8 @@ const {
   bulkAssign,
   bulkDelete,
   listTaskActivity,
+  listTaskRisk,
+  explainTaskRisk,
 } = require('../controllers/task.controller');
 
 const router = express.Router();
@@ -28,7 +30,10 @@ router.patch('/bulk/assign', bulkAssign);
 router.delete('/bulk', bulkDelete);
 
 router.get('/', listTasks);
+// must come before /:id
+router.get('/risk', listTaskRisk);
 router.get('/:id', getTask);
+router.get('/:id/risk-explain', explainTaskRisk);
 router.get('/:id/activity', listTaskActivity);
 router.post('/', createTask);
 router.patch('/:id', updateTask);

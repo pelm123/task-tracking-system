@@ -43,3 +43,13 @@ export function bulkDelete(taskIds) {
 export function listTaskActivity(id) {
   return client.get(`/tasks/${id}/activity`).then((res) => res.data);
 }
+
+// rule-based due-date risk for open tasks (optionally for one project)
+export function getTaskRisk(projectId) {
+  return client.get('/tasks/risk', { params: projectId ? { project_id: projectId } : {} }).then((res) => res.data);
+}
+
+// ask = true also requests the optional AI explanation (slower, rate limited)
+export function getTaskRiskExplain(id, ask = false) {
+  return client.get(`/tasks/${id}/risk-explain`, { params: ask ? { ai: 1 } : {} }).then((res) => res.data);
+}

@@ -1,0 +1,177 @@
+.wrap {
+  position: relative;
+}
+
+.trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 7px 10px;
+  cursor: pointer;
+  max-width: 240px;
+  transition: border-color 0.12s ease;
+}
+
+.trigger:hover {
+  border-color: var(--color-text-muted);
+}
+
+.dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.triggerName {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.countBadge {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  background: var(--color-surface);
+  border-radius: 999px;
+  padding: 1px 7px;
+  flex-shrink: 0;
+}
+
+.chevron {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  margin-left: 2px;
+  flex-shrink: 0;
+}
+
+.panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  width: 300px;
+  overflow: hidden;
+  z-index: 30;
+}
+
+.panelRight {
+  left: auto;
+  right: 0;
+}
+
+/* multi-colour dot used for the "All projects" entry */
+.allDot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: conic-gradient(#4c8dff, #3fbf7f, #f0a93b, #e255a1, #8e7cff, #4c8dff);
+}
+
+.searchWrap {
+  padding: 10px 10px 4px;
+}
+
+.searchInput {
+  width: 100%;
+  font-size: 13px;
+  padding: 7px 10px;
+}
+
+.list {
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.emptyText {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  font-style: italic;
+  padding: 10px 8px;
+  margin: 0;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.row:hover {
+  background: var(--color-surface);
+}
+
+.rowActive {
+  background: var(--color-accent-soft);
+}
+
+.rowName {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.deleteBtn {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  opacity: 0;
+  flex-shrink: 0;
+  transition: opacity 0.1s ease, color 0.1s ease;
+}
+
+.row:hover .deleteBtn {
+  opacity: 1;
+}
+
+.deleteBtn:hover {
+  color: var(--priority-high);
+}
+
+.newProjectBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--color-border);
+  padding: 11px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-accent);
+  cursor: pointer;
+  text-align: left;
+}
+
+.newProjectBtn:hover {
+  background: var(--color-surface);
+}
+
+.plusIcon {
+  font-size: 15px;
+  line-height: 1;
+}

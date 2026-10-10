@@ -3,6 +3,8 @@ import { useAuth } from '../context/AuthContext';
 import * as authApi from '../api/auth';
 import * as lineApi from '../api/line';
 import { t } from '../i18n';
+import PasswordRequirements from '../components/PasswordRequirements';
+import { isPasswordValid } from '../utils/passwordPolicy';
 import styles from './profile.module.css';
 
 const NOTIFICATION_TYPE_KEYS = ['assigned', 'status_change', 'comment', 'due_soon', 'overdue', 'approved', 'approval_denied'];
@@ -17,6 +19,7 @@ export default function ProfilePage() {
 
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [pwSaving, setPwSaving] = useState(false);
   const [pwMsg, setPwMsg] = useState('');
   const [pwError, setPwError] = useState('');
@@ -74,12 +77,21 @@ export default function ProfilePage() {
     e.preventDefault();
     setPwError('');
     setPwMsg('');
+    if (!isPasswordValid(newPassword, { email: user?.email, name: user?.name })) {
+      setPwError(t('password.notStrong'));
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPwError(t('password.mismatch'));
+      return;
+    }
     setPwSaving(true);
     try {
-      await authApi.changePassword(currentPassword, newPassword);
+      await authApi.changePassword(currentPassword, newPassword, confirmPassword);
       setPwMsg(t('profile.pwUpdated'));
       setCurrentPassword('');
       setNewPassword('');
+      setConfirmPassword('');
     } catch (err) {
       setPwError(err.response?.data?.message || t('profile.pwFail'));
     } finally {
@@ -132,6 +144,7 @@ export default function ProfilePage() {
                 type="password"
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
+                autoComplete="current-password"
               />
             </div>
             <div className={styles.field}>
@@ -139,11 +152,29 @@ export default function ProfilePage() {
               <input
                 id="newPw"
                 type="password"
-                minLength={6}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
+                autoComplete="new-password"
               />
             </div>
+            <div className={styles.field}>
+              <label htmlFor="confirmPw">{t('password.confirmNew')}</label>
+              <input
+                id="confirmPw"
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                autoComplete="new-password"
+              />
+            </div>
+            {newPassword && (
+              <PasswordRequirements
+                password={newPassword}
+                confirm={confirmPassword}
+                email={user?.email || ''}
+                name={user?.name || ''}
+              />
+            )}
             {pwError && <p className={styles.errorText}>{pwError}</p>}
             {pwMsg && <p className={styles.successText}>{pwMsg}</p>}
             <button type="submit" className="btn btn-primary" disabled={pwSaving}>

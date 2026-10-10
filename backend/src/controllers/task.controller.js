@@ -1,34 +1,38 @@
 const pool = require('../config/db');
+const { scoreTask, MIN_HISTORY } = require('../config/risk');
+const { explainRisk, isEnabled: aiEnabled } = require('../config/aiExplain');
 const { logActivity } = require('../config/activity');
 const { notify, notifyMany, getUserLanguage } = require('../config/notify');
 const { describeChange, forLang } = require('../config/i18n');
+const { ASSIGNEES_SUBQUERY, getEnrichedTask } = require('../config/taskQuery');
 
 const VALID_STATUSES = ['todo', 'in_progress', 'review', 'done'];
 const VALID_PRIORITIES = ['low', 'medium', 'high'];
 const MIN_REMINDER_HOURS = 1;
 const MAX_REMINDER_HOURS = 24 * 30; // 30 days — generous ceiling, not a real limit
 
-// shared SELECT fragment: aggregates every row in task_assignees into a
-// single JSON array per task, e.g. [{"id": "...", "name": "Alice"}, ...]
-// so one query returns a task with all of its assignees, in any count.
-const ASSIGNEES_SUBQUERY = `
-  COALESCE(
-    (SELECT json_agg(json_build_object('id', u.id, 'name', u.name) ORDER BY u.name)
-     FROM task_assignees ta
-     JOIN users u ON u.id = ta.user_id
-     WHERE ta.task_id = t.id),
-    '[]'
-  ) AS assignees
-`;
 
 // broadcasts a task change to every browser tab currently viewing this
 // project's board, so drag-and-drop/create/edit/delete show up live for
 // everyone without a refresh
 function broadcastTask(req, projectId, event, payload) {
+  if (!projectId) return;
   const io = req.app.get('io');
-  if (io && projectId) {
+  if (io) {
+    // single-process mode: this process owns the Socket.IO server
     io.to(`project:${projectId}`).emit(event, payload);
+    return;
   }
+  // split mode: the Notification service owns Socket.IO; hand it the event
+  // over Postgres NOTIFY (8 kB limit, so a big task is sent as a reference)
+  const room = `project:${projectId}`;
+  let msg = JSON.stringify({ room, event, payload });
+  if (msg.length > 7000 && payload && payload.id) {
+    msg = JSON.stringify({ room, event, ref: payload.id });
+  }
+  pool.query('SELECT pg_notify($1, $2)', ['task_event', msg]).catch((err) =>
+    console.error('task_event notify failed:', err.message)
+  );
 }
 
 async function getUserName(userId) {
@@ -42,22 +46,6 @@ function isValidReminderHours(n) {
   return Number.isInteger(n) && n >= MIN_REMINDER_HOURS && n <= MAX_REMINDER_HOURS;
 }
 
-async function getEnrichedTask(id) {
-  const result = await pool.query(
-    `SELECT t.id, t.title, t.description, t.status, t.priority, t.due_date,
-            t.reminder_hours_before,
-            t.project_id, p.name AS project_name,
-            t.created_by, c.name AS creator_name,
-            t.created_at, t.updated_at, t.completed_at,
-            ${ASSIGNEES_SUBQUERY}
-     FROM tasks t
-     LEFT JOIN users c ON c.id = t.created_by
-     LEFT JOIN projects p ON p.id = t.project_id
-     WHERE t.id = $1`,
-    [id]
-  );
-  return result.rows[0];
-}
 
 // Notifies a specific set of user IDs that they were assigned to `task`.
 // task must already be the ENRICHED version (has project_name, priority, due_date).
@@ -149,6 +137,91 @@ async function listTasks(req, res) {
     res.json(result.rows);
   } catch (err) {
     console.error('List tasks error:', err.message);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+// shared inputs for risk scoring: each person's open workload + how long
+// finished tasks typically took
+async function loadRiskContext() {
+  const [load, hist] = await Promise.all([
+    pool.query(
+      `SELECT ta.user_id, COUNT(*)::int AS open_count
+       FROM task_assignees ta JOIN tasks t ON t.id = ta.task_id
+       WHERE t.status <> 'done' GROUP BY ta.user_id`
+    ),
+    pool.query(
+      `SELECT COUNT(*)::int AS n,
+              percentile_cont(0.5) WITHIN GROUP (ORDER BY EXTRACT(EPOCH FROM (completed_at - created_at)) / 86400) AS median_days
+       FROM tasks WHERE status = 'done' AND completed_at IS NOT NULL`
+    ),
+  ]);
+  const openLoad = new Map(load.rows.map((r) => [r.user_id, r.open_count]));
+  const trusted = hist.rows[0].n >= MIN_HISTORY && hist.rows[0].median_days != null;
+  const medianDays = trusted ? Math.max(0.5, Number(hist.rows[0].median_days)) : null;
+  return { openLoad, medianDays, historyCount: hist.rows[0].n };
+}
+
+// GET /tasks/risk?project_id=  — rule-based due-date risk for open tasks
+async function listTaskRisk(req, res) {
+  const { project_id } = req.query;
+  try {
+    const [tasks, ctx] = await Promise.all([
+      pool.query(
+        `SELECT t.id, t.title, t.status, t.priority, t.due_date, t.project_id, p.name AS project_name, ${ASSIGNEES_SUBQUERY}
+         FROM tasks t LEFT JOIN projects p ON p.id = t.project_id
+         WHERE t.status <> 'done' ${project_id ? 'AND t.project_id = $1' : ''}`,
+        project_id ? [project_id] : []
+      ),
+      loadRiskContext(),
+    ]);
+    const now = Date.now();
+    const items = tasks.rows.map((t) => ({
+      id: t.id,
+      title: t.title,
+      status: t.status,
+      due_date: t.due_date,
+      project_id: t.project_id,
+      project_name: t.project_name,
+      ...scoreTask(t, ctx, now),
+    }));
+    res.json({ medianDays: ctx.medianDays, historyCount: ctx.historyCount, aiEnabled: aiEnabled(), items });
+  } catch (err) {
+    console.error('Task risk error:', err.message);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+// GET /tasks/:id/risk-explain  — optional AI explanation of one task's risk.
+// Returns explanation: null when AI is off, the task is low risk, or the
+// model is unavailable; the client then just shows the rule-based reasons.
+async function explainTaskRisk(req, res) {
+  try {
+    const result = await pool.query(
+      `SELECT t.id, t.status, t.priority, t.due_date, ${ASSIGNEES_SUBQUERY}
+       FROM tasks t WHERE t.id = $1`,
+      [req.params.id]
+    );
+    const task = result.rows[0];
+    if (!task) return res.status(404).json({ message: 'Task not found' });
+
+    const ctx = await loadRiskContext();
+    const risk = scoreTask(task, ctx, Date.now());
+    let explanation = null;
+    if (risk && aiEnabled() && req.query.ai === '1') {
+      const facts = {
+        status: task.status,
+        priority: task.priority,
+        hoursLeft: task.due_date ? Math.round((new Date(task.due_date).getTime() - Date.now()) / 3600000) : null,
+        assigneeCount: task.assignees.length,
+        busiestAssigneeOpenTasks: Math.max(0, ...task.assignees.map((a) => ctx.openLoad.get(a.id) || 0)),
+        typicalTaskDays: ctx.medianDays != null ? Math.round(ctx.medianDays * 10) / 10 : null,
+      };
+      explanation = await explainRisk(task, risk, facts, req.lang);
+    }
+    res.json({ aiEnabled: aiEnabled(), risk, explanation });
+  } catch (err) {
+    console.error('Explain risk error:', err.message);
     res.status(500).json({ message: 'Internal server error' });
   }
 }
@@ -902,6 +975,8 @@ async function bulkDelete(req, res) {
 
 module.exports = {
   listTasks,
+  listTaskRisk,
+  explainTaskRisk,
   getTask,
   createTask,
   updateTask,

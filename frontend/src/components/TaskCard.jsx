@@ -1,6 +1,7 @@
 import { Draggable } from '@hello-pangea/dnd';
 import { getDueCountdown, isOverdue, formatOverdueShort, formatDueDateShort } from '../utils/dueDate';
 import { t, getLocale } from '../i18n';
+import RiskBadge from './RiskBadge';
 import styles from '../pages/board.module.css';
 
 const PRIORITY_COLORS = {
@@ -22,6 +23,7 @@ export default function TaskCard({
   onMove,
   currentUser,
   now,
+  risk,
 }) {
   const showApprovalActions = canApprove && task.status === 'review';
   const countdown = getDueCountdown(task.due_date, now);
@@ -74,6 +76,7 @@ export default function TaskCard({
             >
               {t(`priority.${task.priority}`)}
             </span>
+            <RiskBadge risk={risk} />
             {overdue && (
               <span
                 className={styles.overdueBadge}

@@ -2,15 +2,34 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const pool = require('../config/db');
 const { normalizeLang, LANGS } = require('../config/i18n');
+const { validatePassword } = require('../config/password');
+const { lockedMinutes, recordFailure, clearFailures } = require('../config/loginThrottle');
 
-const SALT_ROUNDS = 10;
+const SALT_ROUNDS = 12;
 const TOKEN_EXPIRY = '7d';
 
-async function register(req, res) {
-  const { name, email, password, role } = req.body;
+// Compared against when the email has no account, so a login for an unknown
+// email takes as long as a wrong password and can't be used to find accounts.
+const DUMMY_HASH = bcrypt.hashSync('dummy-password-for-timing', SALT_ROUNDS);
 
-  if (!name || !email || !password) {
+function isFilledString(value) {
+  return typeof value === 'string' && value.trim().length > 0;
+}
+
+async function register(req, res) {
+  const { name, email, password, confirmPassword, role } = req.body;
+
+  if (!isFilledString(name) || !isFilledString(email) || typeof password !== 'string' || !password) {
     return res.status(400).json({ message: 'name, email, and password are required' });
+  }
+  // the form asks for the password twice; the server checks it too so a
+  // typo can't lock someone out of a brand-new account
+  if (password !== confirmPassword) {
+    return res.status(400).json({ message: 'Passwords do not match' });
+  }
+  const passwordError = validatePassword(password, { email, name });
+  if (passwordError) {
+    return res.status(400).json({ message: passwordError });
   }
 
   try {
@@ -44,8 +63,15 @@ async function register(req, res) {
 async function login(req, res) {
   const { email, password } = req.body;
 
-  if (!email || !password) {
+  if (!isFilledString(email) || typeof password !== 'string' || !password) {
     return res.status(400).json({ message: 'email and password are required' });
+  }
+
+  const minutes = lockedMinutes(email);
+  if (minutes > 0) {
+    return res.status(429).json({
+      message: `Too many failed sign-in attempts. Try again in ${minutes} minute${minutes === 1 ? '' : 's'}.`,
+    });
   }
 
   try {
@@ -54,16 +80,14 @@ async function login(req, res) {
       [email.trim()]
     );
 
-    if (result.rows.length === 0) {
-      return res.status(401).json({ message: 'Invalid email or password' });
-    }
-
     const user = result.rows[0];
-    const passwordMatches = await bcrypt.compare(password, user.password_hash);
+    const passwordMatches = await bcrypt.compare(password, user ? user.password_hash : DUMMY_HASH);
 
-    if (!passwordMatches) {
+    if (!user || !passwordMatches) {
+      recordFailure(email);
       return res.status(401).json({ message: 'Invalid email or password' });
     }
+    clearFailures(email);
 
     // Checked only after the password matches, so this message can't be used
     // to probe which emails have accounts.
@@ -135,16 +159,19 @@ async function updateLanguage(req, res) {
 
 // PATCH /auth/me/password — change own password
 async function changePassword(req, res) {
-  const { currentPassword, newPassword } = req.body;
-  if (!currentPassword || !newPassword) {
+  const { currentPassword, newPassword, confirmPassword } = req.body;
+  if (typeof currentPassword !== 'string' || !currentPassword || typeof newPassword !== 'string' || !newPassword) {
     return res.status(400).json({ message: 'currentPassword and newPassword are required' });
   }
-  if (newPassword.length < 6) {
-    return res.status(400).json({ message: 'newPassword must be at least 6 characters' });
+  if (newPassword !== confirmPassword) {
+    return res.status(400).json({ message: 'Passwords do not match' });
+  }
+  if (newPassword === currentPassword) {
+    return res.status(400).json({ message: 'New password must be different from the current one' });
   }
 
   try {
-    const result = await pool.query('SELECT password_hash FROM users WHERE id = $1', [req.user.id]);
+    const result = await pool.query('SELECT name, email, password_hash FROM users WHERE id = $1', [req.user.id]);
     if (result.rows.length === 0) {
       return res.status(404).json({ message: 'User not found' });
     }
@@ -152,6 +179,11 @@ async function changePassword(req, res) {
     const matches = await bcrypt.compare(currentPassword, result.rows[0].password_hash);
     if (!matches) {
       return res.status(401).json({ message: 'Current password is incorrect' });
+    }
+
+    const passwordError = validatePassword(newPassword, result.rows[0]);
+    if (passwordError) {
+      return res.status(400).json({ message: passwordError });
     }
 
     const newHash = await bcrypt.hash(newPassword, SALT_ROUNDS);

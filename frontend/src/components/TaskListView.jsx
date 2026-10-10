@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { getDueCountdown, isOverdue, formatOverdueShort, formatDueDateShort } from '../utils/dueDate';
 import { t as tr, getLocale } from '../i18n';
+import RiskBadge from './RiskBadge';
 import styles from './taskListView.module.css';
 
 const STATUS_ORDER = { todo: 0, in_progress: 1, review: 2, done: 3 };
@@ -36,6 +37,7 @@ const SORTERS = {
 export default function TaskListView({
   tasks,
   now,
+  riskById,
   currentUser,
   canApprove,
   selectMode,
@@ -167,6 +169,7 @@ export default function TaskListView({
 
                   <td className={styles.titleCell}>
                     <span className={styles.titleText}>{t.title}</span>
+                    <RiskBadge risk={riskById?.[t.id]} />
                     {overdue && (
                       <span className={styles.overdueBadge} title={countdown?.label}>
                         {tr('home.overduePill', { text: formatOverdueShort(t.due_date, now) })}
