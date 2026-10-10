@@ -94,6 +94,11 @@
   vertical-align: middle;
 }
 
+/* short columns (status, priority) stay on one line, even for Thai labels */
+.table .nowrap {
+  white-space: nowrap;
+}
+
 .table tr:last-child td {
   border-bottom: none;
 }
