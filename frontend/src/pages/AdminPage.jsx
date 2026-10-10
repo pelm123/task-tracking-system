@@ -28,6 +28,12 @@ const STATUS_COLORS = {
   done: 'var(--status-done)',
 };
 
+const PRIORITY_COLORS = {
+  low: 'var(--priority-low)',
+  medium: 'var(--priority-medium)',
+  high: 'var(--priority-high)',
+};
+
 function formatDate(dateStr) {
   if (!dateStr) return '—';
   return new Date(dateStr).toLocaleDateString(getLocale(), { month: 'short', day: 'numeric', year: 'numeric' });
@@ -870,7 +876,11 @@ export default function AdminPage() {
                           {tr(`status.${t.status}`)}
                         </span>
                       </td>
-                      <td className={`${styles.muted} ${styles.center}`}>{tr(`priority.${t.priority}`)}</td>
+                      <td className={styles.center}>
+                        <span className={styles.badge} style={{ color: PRIORITY_COLORS[t.priority] }}>
+                          {tr(`priority.${t.priority}`)}
+                        </span>
+                      </td>
                       <td className={styles.muted}>
                         {t.assignees && t.assignees.length > 0
                           ? t.assignees.map((a) => a.name).join(', ')
