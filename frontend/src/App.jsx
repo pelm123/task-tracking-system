@@ -21,8 +21,10 @@ function AuthedLayout({ children, managerOnly }) {
   // string and date helper re-evaluates; the header and auth state stay put.
   const content = (
     <ProjectProvider>
-      <AppHeader />
-      <div key={lang} className={styles.appBody}>{children}</div>
+      <div className={styles.appShell}>
+        <AppHeader />
+        <div key={lang} className={styles.appBody}>{children}</div>
+      </div>
     </ProjectProvider>
   );
   return managerOnly ? (
