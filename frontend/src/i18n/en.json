@@ -523,7 +523,7 @@
     "deleteTaskMsg": "\"{title}\" and its comments and files will be deleted for good.",
     "resetIntroBefore": "Set a new password for ",
     "resetIntroAfter": ". Their current password stops working immediately — tell them the new one privately.",
-    "pwPlaceholder": "At least 6 characters",
+    "pwPlaceholder": "At least 8 characters",
     "setPassword": "Set password"
   },
   "activityDetail": {
