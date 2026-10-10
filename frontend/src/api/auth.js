@@ -20,6 +20,6 @@ export function updateLanguage(language) {
   return client.patch('/auth/me/language', { language }).then((res) => res.data);
 }
 
-export function changePassword(currentPassword, newPassword) {
-  return client.patch('/auth/me/password', { currentPassword, newPassword }).then((res) => res.data);
+export function changePassword(currentPassword, newPassword, confirmPassword) {
+  return client.patch('/auth/me/password', { currentPassword, newPassword, confirmPassword }).then((res) => res.data);
 }

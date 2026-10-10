@@ -168,7 +168,6 @@ const TH_MESSAGES = {
   'Notification not found': 'ไม่พบการแจ้งเตือน',
   'File missing from disk': 'ไม่พบไฟล์ในระบบจัดเก็บ',
   'taskIds must be a non-empty array': 'ต้องระบุงานอย่างน้อยหนึ่งงาน',
-  'newPassword must be at least 6 characters': 'รหัสผ่านใหม่ต้องมีอย่างน้อย 6 ตัวอักษร',
   'name is required': 'กรุณากรอกชื่อ',
   'content is required': 'กรุณากรอกข้อความ',
   'title is required': 'กรุณากรอกชื่องาน',
@@ -239,6 +238,15 @@ const TH_MESSAGES = {
     'เฉพาะผู้ที่ได้รับมอบหมายงานนี้ (และ PM/ผู้ดูแลระบบ) เท่านั้นที่เปิดหรือดาวน์โหลดไฟล์ได้',
   'Each preference value must be true or false': 'ค่าการตั้งค่าแต่ละรายการต้องเป็น true หรือ false',
   'language must be "th" or "en"': 'ภาษาต้องเป็น th หรือ en',
+  'Passwords do not match': 'รหัสผ่านทั้งสองช่องไม่ตรงกัน',
+  'Password is required': 'กรุณากรอกรหัสผ่าน',
+  'Password is too long': 'รหัสผ่านยาวเกินไป',
+  'Password must contain an uppercase letter, a lowercase letter, a number and a symbol':
+    'รหัสผ่านต้องมีตัวพิมพ์ใหญ่ ตัวพิมพ์เล็ก ตัวเลข และสัญลักษณ์',
+  'Password cannot start or end with a space': 'รหัสผ่านต้องไม่ขึ้นต้นหรือลงท้ายด้วยช่องว่าง',
+  'This password is too common. Choose another one': 'รหัสผ่านนี้ใช้กันทั่วไปเกินไป โปรดเลือกรหัสผ่านอื่น',
+  'Password must not contain your name or email': 'รหัสผ่านต้องไม่มีชื่อหรืออีเมลของคุณ',
+  'New password must be different from the current one': 'รหัสผ่านใหม่ต้องไม่ซ้ำกับรหัสผ่านปัจจุบัน',
 };
 
 const TH_PATTERNS = [
@@ -258,6 +266,11 @@ const TH_PATTERNS = [
   ],
   [/^File is too large\. The limit is (\d+) MB\.$/, (m) => `ไฟล์ใหญ่เกินไป จำกัดไม่เกิน ${m[1]} MB`],
   [/^Unknown notification type: (.+)$/, (m) => `ไม่รู้จักประเภทการแจ้งเตือน: ${m[1]}`],
+  [/^Password must be at least (\d+) characters$/, (m) => `รหัสผ่านต้องมีอย่างน้อย ${m[1]} ตัวอักษร`],
+  [
+    /^Too many failed sign-in attempts\. Try again in (\d+) minutes?\.$/,
+    (m) => `เข้าสู่ระบบผิดหลายครั้งเกินไป โปรดลองอีกครั้งใน ${m[1]} นาที`,
+  ],
 ];
 
 // Returns the Thai text for an English API message, or the original when

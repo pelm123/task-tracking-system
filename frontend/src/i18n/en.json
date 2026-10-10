@@ -101,6 +101,19 @@
     "waitingNote": "Try signing in again later. If it takes a while, let your admin know you've signed up.",
     "backToSignIn": "Back to sign in"
   },
+  "password": {
+    "confirm": "Confirm password",
+    "confirmNew": "Confirm new password",
+    "ruleLength": "At least {min} characters",
+    "ruleUpper": "An uppercase letter (A–Z)",
+    "ruleLower": "A lowercase letter (a–z)",
+    "ruleNumber": "A number (0–9)",
+    "ruleSymbol": "A symbol, such as ! @ # $",
+    "rulePersonal": "Doesn't contain your name or email, and doesn't start or end with a space",
+    "ruleMatch": "Both passwords match",
+    "mismatch": "The passwords don't match",
+    "notStrong": "Your password doesn't meet all the requirements yet."
+  },
   "confirm": {
     "typeBefore": "Type ",
     "typeAfter": " to confirm",

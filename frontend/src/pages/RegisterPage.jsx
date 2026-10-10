@@ -3,6 +3,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LanguageContext';
 import LanguageToggle from '../components/LanguageToggle';
+import PasswordRequirements from '../components/PasswordRequirements';
+import { isPasswordValid } from '../utils/passwordPolicy';
 import styles from './auth.module.css';
 
 export default function RegisterPage() {
@@ -12,6 +14,7 @@ export default function RegisterPage() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [role, setRole] = useState('member');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -20,9 +23,17 @@ export default function RegisterPage() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
+    if (!isPasswordValid(password, { email, name })) {
+      setError(t('password.notStrong'));
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError(t('password.mismatch'));
+      return;
+    }
     setLoading(true);
     try {
-      await register(name, email, password, role);
+      await register(name, email, password, confirmPassword, role);
       setSubmittedEmail(email);
     } catch (err) {
       setError(err.response?.data?.message || t('auth.registerFail'));
@@ -89,10 +100,24 @@ export default function RegisterPage() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              minLength={6}
+              autoComplete="new-password"
               required
             />
           </div>
+
+          <div className={styles.field}>
+            <label htmlFor="confirmPassword">{t('password.confirm')}</label>
+            <input
+              id="confirmPassword"
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              autoComplete="new-password"
+              required
+            />
+          </div>
+
+          <PasswordRequirements password={password} confirm={confirmPassword} email={email} name={name} />
 
           <div className={styles.field}>
             <label htmlFor="role">{t('auth.role')}</label>
