@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useLang } from '../context/LanguageContext';
-import LanguageToggle from '../components/LanguageToggle';
+import AuthToggles from '../components/AuthToggles';
 import PasswordRequirements from '../components/PasswordRequirements';
 import { isPasswordValid } from '../utils/passwordPolicy';
 import styles from './auth.module.css';
@@ -44,7 +44,7 @@ export default function RegisterPage() {
 
   return (
     <div className={styles.authScreen}>
-      <LanguageToggle />
+      <AuthToggles />
       <div className={styles.brandPanel}>
         <span className={styles.brandMark}>{t('auth.brand')}</span>
         <div className={styles.brandBody}>
