@@ -523,7 +523,7 @@
     "deleteTaskMsg": "\"{title}\" พร้อมความคิดเห็นและไฟล์จะถูกลบถาวร",
     "resetIntroBefore": "ตั้งรหัสผ่านใหม่ให้ ",
     "resetIntroAfter": " รหัสผ่านเดิมจะใช้ไม่ได้ทันที — โปรดแจ้งรหัสใหม่ให้เขาเป็นการส่วนตัว",
-    "pwPlaceholder": "อย่างน้อย 6 ตัวอักษร",
+    "pwPlaceholder": "อย่างน้อย 8 ตัวอักษร",
     "setPassword": "ตั้งรหัสผ่าน"
   },
   "activityDetail": {

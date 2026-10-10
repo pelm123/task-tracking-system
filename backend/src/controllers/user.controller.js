@@ -1,7 +1,8 @@
 const bcrypt = require('bcrypt');
 const pool = require('../config/db');
+const { validatePassword } = require('../config/password');
 
-const SALT_ROUNDS = 10;
+const SALT_ROUNDS = 12;
 
 // how many approved admins exist besides `excludeId`
 async function otherAdminCount(excludeId) {
@@ -120,10 +121,17 @@ async function deleteUser(req, res) {
 // who has forgotten theirs (there's no email-based reset).
 async function resetUserPassword(req, res) {
   const { newPassword } = req.body;
-  if (!newPassword || newPassword.length < 6) {
-    return res.status(400).json({ message: 'newPassword must be at least 6 characters' });
-  }
   try {
+    const target = await pool.query('SELECT name, email FROM users WHERE id = $1', [req.params.id]);
+    if (target.rows.length === 0) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    // same rules as sign-up, checked against the person whose password it is
+    const passwordError = validatePassword(newPassword, target.rows[0]);
+    if (passwordError) {
+      return res.status(400).json({ message: passwordError });
+    }
+
     const hash = await bcrypt.hash(newPassword, SALT_ROUNDS);
     const result = await pool.query('UPDATE users SET password_hash = $1 WHERE id = $2 RETURNING id', [
       hash,
