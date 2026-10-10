@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { t } from '../i18n';
 import styles from './modal.module.css';
+import { sortUsersByRole } from '../utils/sortUsers';
 import {
   REMINDER_PRESETS,
   DEFAULT_REMINDER_HOURS,
@@ -139,7 +140,7 @@ export default function NewTaskModal({ users, onClose, onCreate }) {
             </label>
             <div className={styles.assigneeList}>
               {users.length === 0 && <p className={styles.emptyText}>{t('modal.noUsers')}</p>}
-              {users.map((u) => (
+              {sortUsersByRole(users).map((u) => (
                 <label key={u.id} className={styles.assigneeRow}>
                   <input
                     type="checkbox"

@@ -14,6 +14,7 @@ import {
 import { formatDateTime, timeAgo } from '../utils/dateTime';
 import { t, getLocale } from '../i18n';
 import styles from './modal.module.css';
+import { sortUsersByRole } from '../utils/sortUsers';
 import TaskRiskSection from './TaskRiskSection';
 
 const MAX_UPLOAD_MB = 200; // keep in sync with backend middleware/upload.js (UPLOAD_MAX_MB)
@@ -499,7 +500,7 @@ export default function TaskDetailModal({ task, users, onClose, onUpdate, onDele
             </label>
             <div className={styles.assigneeList}>
               {users.length === 0 && <p className={styles.emptyText}>{t('modal.noUsers')}</p>}
-              {users.map((u) => (
+              {sortUsersByRole(users).map((u) => (
                 <label
                   key={u.id}
                   className={styles.assigneeRow}
