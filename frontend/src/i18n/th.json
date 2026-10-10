@@ -441,7 +441,8 @@
     "totalAll": "งานทั้งหมด (ทุกช่วงเวลา)",
     "completedAll": "เสร็จแล้ว (ทุกช่วงเวลา)",
     "overdueNow": "เลยกำหนดตอนนี้",
-    "selectedPeriod": "ช่วงที่เลือก"
+    "selectedPeriod": "ช่วงที่เลือก",
+    "tasksSeries": "งาน"
   },
   "admin": {
     "loadFail": "โหลดข้อมูลผู้ดูแลไม่สำเร็จ",

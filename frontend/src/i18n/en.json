@@ -441,7 +441,8 @@
     "totalAll": "Total tasks (all time)",
     "completedAll": "Completed (all time)",
     "overdueNow": "Overdue right now",
-    "selectedPeriod": "Selected period"
+    "selectedPeriod": "Selected period",
+    "tasksSeries": "Tasks"
   },
   "admin": {
     "loadFail": "Could not load admin data.",

@@ -20,6 +20,7 @@ import { colorForProject } from '../utils/projectColor';
 import { timeAgo } from '../utils/dateTime';
 import { t as tr, getLocale } from '../i18n';
 import AtRiskPanel from '../components/AtRiskPanel';
+import ProjectSwitcher from '../components/ProjectSwitcher';
 
 const STATUS_COLORS = {
   todo: '#8b9490',
@@ -28,6 +29,22 @@ const STATUS_COLORS = {
   done: '#6b9080',
 };
 const PRIORITY_COLORS = { low: '#7c8985', medium: '#c9a63e', high: '#c9603e' };
+
+// Recharts colours the tooltip's label and rows on its own (dark text by
+// default), and the bar hover cursor is a light grey block; both are set from
+// the theme so they read in dark and light mode.
+const TOOLTIP_PROPS = {
+  contentStyle: {
+    background: 'var(--color-surface-raised)',
+    border: '1px solid var(--color-border)',
+    borderRadius: 'var(--radius-sm)',
+    boxShadow: 'var(--shadow-md)',
+    fontSize: 13,
+  },
+  labelStyle: { color: 'var(--color-text)', fontWeight: 600, marginBottom: 2 },
+  itemStyle: { color: 'var(--color-text)' },
+  cursor: { fill: 'var(--color-accent-soft)' },
+};
 
 const ALL_PROJECTS = 'all';
 const PROJECT_FILTER_STORAGE_KEY = 'dashboardProjectFilter';
@@ -156,8 +173,8 @@ function PeriodSection({ title, subtitle, data }) {
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
               <XAxis dataKey="label" stroke="var(--color-text-muted)" fontSize={12} />
               <YAxis stroke="var(--color-text-muted)" fontSize={12} allowDecimals={false} />
-              <Tooltip contentStyle={{ background: 'var(--color-surface-raised)', border: '1px solid var(--color-border)', color: 'var(--color-text)', fontSize: 13 }} />
-              <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+              <Tooltip {...TOOLTIP_PROPS} />
+              <Bar dataKey="count" name={tr('dashboard.tasksSeries')} radius={[4, 4, 0, 0]}>
                 {statusData.map((entry) => (
                   <Cell key={entry.status} fill={STATUS_COLORS[entry.status]} />
                 ))}
@@ -176,7 +193,7 @@ function PeriodSection({ title, subtitle, data }) {
                 ))}
               </Pie>
               <Legend wrapperStyle={{ fontSize: 12, color: 'var(--color-text-muted)' }} />
-              <Tooltip contentStyle={{ background: 'var(--color-surface-raised)', border: '1px solid var(--color-border)', color: 'var(--color-text)', fontSize: 13 }} />
+              <Tooltip {...TOOLTIP_PROPS} />
             </PieChart>
           </ResponsiveContainer>
         </div>
@@ -308,8 +325,8 @@ function SingleProjectDashboard({ projectId }) {
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
               <XAxis dataKey="label" stroke="var(--color-text-muted)" fontSize={12} />
               <YAxis stroke="var(--color-text-muted)" fontSize={12} allowDecimals={false} />
-              <Tooltip contentStyle={{ background: 'var(--color-surface-raised)', border: '1px solid var(--color-border)', color: 'var(--color-text)', fontSize: 13 }} />
-              <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+              <Tooltip {...TOOLTIP_PROPS} />
+              <Bar dataKey="count" name={tr('dashboard.tasksSeries')} radius={[4, 4, 0, 0]}>
                 {statusData.map((entry) => (
                   <Cell key={entry.status} fill={STATUS_COLORS[entry.status]} />
                 ))}
@@ -328,7 +345,7 @@ function SingleProjectDashboard({ projectId }) {
                 ))}
               </Pie>
               <Legend wrapperStyle={{ fontSize: 12, color: 'var(--color-text-muted)' }} />
-              <Tooltip contentStyle={{ background: 'var(--color-surface-raised)', border: '1px solid var(--color-border)', color: 'var(--color-text)', fontSize: 13 }} />
+              <Tooltip {...TOOLTIP_PROPS} />
             </PieChart>
           </ResponsiveContainer>
         </div>
@@ -340,8 +357,8 @@ function SingleProjectDashboard({ projectId }) {
               <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" horizontal={false} />
               <XAxis type="number" stroke="var(--color-text-muted)" fontSize={12} allowDecimals={false} />
               <YAxis type="category" dataKey="name" stroke="var(--color-text-muted)" fontSize={12} width={80} />
-              <Tooltip contentStyle={{ background: 'var(--color-surface-raised)', border: '1px solid var(--color-border)', color: 'var(--color-text)', fontSize: 13 }} />
-              <Bar dataKey="count" fill="var(--color-accent)" radius={[0, 4, 4, 0]} />
+              <Tooltip {...TOOLTIP_PROPS} />
+              <Bar dataKey="count" name={tr('dashboard.tasksSeries')} fill="var(--color-accent)" radius={[0, 4, 4, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -444,17 +461,15 @@ export default function DashboardPage() {
               : tr('dashboard.subOne')}
           </p>
         </div>
-        <label className={styles.rangeLabel}>
+        <div className={styles.rangeLabel}>
           {tr('calendar.showing')}
-          <select value={projectFilter} onChange={(e) => handleProjectFilterChange(e.target.value)}>
-            <option value={ALL_PROJECTS}>{tr('calendar.allProjects')}</option>
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </label>
+          <ProjectSwitcher
+            value={projectFilter}
+            onChange={handleProjectFilterChange}
+            allOption={{ value: ALL_PROJECTS, label: tr('calendar.allProjects') }}
+            alignRight
+          />
+        </div>
       </div>
 
       {showingAllProjects && (
